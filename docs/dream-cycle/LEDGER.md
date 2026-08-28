@@ -132,6 +132,7 @@ alerting.
 | 2026-08-18 | memory | hybridSearch controller reachable via explicit opt-in (was silently null-returning despite config flag) | #3056 | #3057 | yes | ACCEPT-scoped | overall recall@10 +0.267; category B (pure-paraphrase) regresses -0.133 | b28714fb... | recovered-live |
 | 2026-08-19 | swarm | MessageBus retry-attempts silently reset to 0 on every re-queue, unbounded redelivery, message.failed unreachable | #3061 | #3062 | yes | ACCEPT | invocations 96-98/0-failed (baseline) → 3/2/1 stable (candidate); 220/220 tests | 62c4fdf7... | 08-14..08-18 all OPEN, none merged yet |
 
+
 **Recovery note (2026-09-05):** rows for 2026-08-24 through 2026-09-03 were
 again never appended live — same failure class as the 2026-08-19 recovery
 above, now confirmed for a 3rd distinct occurrence. Verified via direct
@@ -159,11 +160,15 @@ finding" to an explicit recommendation: a future `automation`/`meta` DEEP
 night should treat "harden STEP 25's ledger-append against silent failure"
 as a first-class, high-priority candidate, not a background note.
 
-| 2026-08-24 | swarm | weightedConsensus() trust weights now reach raft/byzantine/gossip vote tally (was architecturally unreachable — no field existed to carry them); [0,1] clamp preserves BFT safety margin | #3085 | #3086 | yes | ACCEPT | gossip flip: flat approved=false → weighted approved=true (0.905 vs 0.50); 226/226 tests, 0 regressions; adversarial critic CONFIRMED-WITH-CAVEATS | 08d44c58... | 08-16,17,18,19 MERGED (4/7); 08-14,15 correctly unmerged REJECT evidence; 08-20..23 confirmed real gap (no branch/PR, not a ledger-append failure) |
-| 2026-08-25 | performance | productQuantizeDistance() implemented but never dispatched in HNSW search path — wired in | #3093 | #3094 | yes | ACCEPT | see issue #3093 | n/a (backfill) | unmerged draft as of 09-05 |
-| 2026-08-26 | security | authorizeMcpTool() trusted unsigned caller identity (ASI07) — ADR-377 verifyInvocationToken bound into live chokepoint | #3102 | #3103 | yes | ACCEPT-with-caveats | see issue #3102 | n/a (backfill) | unmerged draft as of 09-05 |
-| 2026-08-27 | intelligence | distillLearning() EWC gate read 1 of 384 Fisher dims via length-collapsed getPenalty() call; rewired to computeConfidencePenalty()/updateFisherFromConfidences() | #3109 | #3110 | yes | ACCEPT-scoped | 152/152 tests (+4 new), baseline-fails/candidate-passes via stash isolation | 89946458... | unmerged draft as of 09-05 |
-| 2026-08-28 | memory | HybridBackend's dead `weights` field now drives real weighted-RRF fusion (was computed, never read by merge helpers) | #3118 | #3119 | yes | ACCEPT | see issue #3118 | n/a (backfill) | unmerged draft as of 09-05 |
+| 2026-08-20 | — | **no-run gap** — no branch/PR/issue exists for this date | — | — | no | — | — | — | no-run gap (external, not diagnosed) |
+| 2026-08-21 | — | **no-run gap** — no branch/PR/issue exists for this date | — | — | no | — | — | — | no-run gap (external, not diagnosed) |
+| 2026-08-22 | — | **no-run gap** — no branch/PR/issue exists for this date | — | — | no | — | — | — | no-run gap (external, not diagnosed) |
+| 2026-08-23 | — | **no-run gap** — no branch/PR/issue exists for this date | — | — | no | — | — | — | no-run gap (external, not diagnosed) |
+| 2026-08-24 | swarm | weightedConsensus() trust weights now reach the vote tally (previously computed, never read by tally) | #3085 | #3086 | yes | ACCEPT | see #3085/#3086 | 08d44c58... | MERGED 2026-09-14 |
+| 2026-08-25 | performance | productQuantizeDistance() wired into HNSW search path (was implemented, never dispatched) | #3093 | #3094 | yes | ACCEPT | see #3093/#3094 | 300da158... | awaiting final CI as of 2026-09-14 |
+| 2026-08-26 | security | ADR-377 caller-identity (Ed25519) verification bound into live authorizeMcpTool() chokepoint | #3102 | #3103 | yes | ACCEPT-with-caveats | see #3102/#3103 | fd944eae... | awaiting CI as of 2026-09-14 |
+| 2026-08-27 | intelligence | distillLearning()'s EWC confidence gate read 1-of-384 Fisher dims (getPenalty length-collapse); wired the pre-existing computeConfidencePenalty/updateFisherFromConfidences instead | #3109 | #3110 | yes | ACCEPT-scoped | 153/153 memory-ruvector-deep tests (+5 new incl. acceptance test); regression-guard test fails on baseline, passes on candidate | 0df6bc4f... | awaiting CI as of 2026-09-14 |
+| 2026-08-28 | memory | `HybridBackend.queryHybrid()`'s dead `weights` field (computed, never consumed by combineUnion) replaced with real weighted-RRF fusion (`combineWeighted`), matching Qdrant/Weaviate/Azure AI Search's weighted-RRF pattern | #3118 | #3119 | yes | ACCEPT | 461/462 suite green (1 pre-existing unrelated env failure, confirmed identical on baseline); weight-sensitivity test fails on baseline, passes on candidate (git-stash isolated) | 47e2f669... | 08-25..27 still OPEN as of 2026-09-14; 08-20..23 no-run gap still undiagnosed |
 | 2026-08-29 | swarm | TopologyManager.rebalanceHybrid() one-directional adjacency bug fixed | #3122 | #3123 | yes | ACCEPT | see issue #3122 | n/a (backfill) | unmerged draft as of 09-05 |
 | 2026-08-30 | performance | unwired diskann-backend.ts removed + stale 150x-12,500x HNSW claim in generated CLAUDE.md corrected | #3129 | #3130 | yes | ACCEPT | see issue #3129 | n/a (backfill) | unmerged draft as of 09-05 |
 | 2026-08-31 | security | MCP governance policy (.harness/mcp-policy.json) was never enforced at runtime — opt-in enforcement wired in | #3138 | #3139 | yes | ACCEPT | see issue #3138 | n/a (backfill) | unmerged draft as of 09-05 |
