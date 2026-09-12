@@ -611,12 +611,22 @@ class LocalReasoningBank {
   }
 
   /**
-   * Find similar patterns by embedding
+   * Find similar patterns by embedding.
+   *
+   * `confidence` on each result is the pattern's own learned reliability
+   * (unchanged from storage) — NOT how well it matches this query. The
+   * per-query cosine score is returned separately as `similarity`. Callers
+   * that want "how good a semantic match is this" must read `.similarity`;
+   * callers that want "how reliable has this pattern proven to be" read
+   * `.confidence`. Prior to this fix both were conflated (confidence was
+   * overwritten with the cosine score), which silently broke any consumer
+   * that needed to tell them apart (found during the 2026-09-12 dream-cycle
+   * intelligence-surface review).
    */
   findSimilar(
     queryEmbedding: number[],
     options: { k?: number; threshold?: number; type?: string }
-  ): StoredPattern[] {
+  ): (StoredPattern & { similarity: number })[] {
     const { k = 5, threshold = 0.5, type } = options;
 
     // Filter by type if specified
@@ -639,7 +649,7 @@ class LocalReasoningBank {
         // Update usage
         s.pattern.usageCount++;
         s.pattern.lastUsedAt = Date.now();
-        return { ...s.pattern, confidence: s.score };
+        return { ...s.pattern, similarity: s.score };
       });
   }
 
@@ -1242,7 +1252,7 @@ export async function findSimilarPatterns(
       usageCount: r.usageCount,
       createdAt: r.createdAt,
       lastUsedAt: r.lastUsedAt,
-      similarity: (r as unknown as { similarity?: number }).similarity ?? r.confidence ?? 0.5
+      similarity: r.similarity
     }));
   } catch {
     return [];
