@@ -28,7 +28,7 @@ function exactScoreMap(value, keys, label) {
 }
 
 function readBoundedRegularFile(path) {
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(descriptor);
     assert(stat.isFile(), 'improver plan must be a regular file');

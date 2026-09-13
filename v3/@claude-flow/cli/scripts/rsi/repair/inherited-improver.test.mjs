@@ -117,15 +117,20 @@ test('no API can convert engineering descriptors into repair candidates', () => 
   assert.throws(() => executeRepairCandidate(), /CANDIDATE_EXECUTION_DISABLED/);
 });
 
-test('plan acquisition rejects symlinks and oversized files before parsing', () => {
+test('plan acquisition rejects symlinks, FIFOs and oversized files before parsing', () => {
   const directory = mkdtempSync(join(tmpdir(), 'ruflo-improver-plan-read-'));
   const target = join(directory, 'target.json'), link = join(directory, 'link.json');
-  const oversized = join(directory, 'oversized.json');
+  const oversized = join(directory, 'oversized.json'), fifo = join(directory, 'plan.fifo');
   try {
     writeFileSync(target, '{}'); symlinkSync(target, link);
     writeFileSync(oversized, Buffer.alloc(1024 * 1024 + 1));
+    const made = spawnSync('mkfifo', [fifo], { encoding: 'utf8', timeout: 1000, shell: false });
+    assert.equal(made.status, 0, made.stderr);
     assert.throws(() => loadImproverPlan(link), /ELOOP|symbolic link/i);
     assert.throws(() => loadImproverPlan(oversized), /size bound/);
+    const started = performance.now();
+    assert.throws(() => loadImproverPlan(fifo), /regular file/);
+    assert(performance.now() - started < 500, 'FIFO rejection must not block');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

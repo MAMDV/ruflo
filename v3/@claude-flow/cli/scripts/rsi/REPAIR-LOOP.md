@@ -193,6 +193,14 @@ that exposed fix and only the inherited arm has template coverage; this is not
 autonomous synthesis, matched-control comparison, repository execution or RSI
 evidence. Candidate execution remains disabled.
 
+[IMPROVER-003.md](IMPROVER-003.md) gives inherited and all four controls the
+same two-descriptor-to-two-artifact materialization mechanism. Four frozen,
+researcher-authored templates cover every proposal family; duplicate candidates
+and generation-zero control degeneracy are preserved. This removes unequal patch
+availability. Parent recomputation work and bounded input reads are charged
+separately, while failed child starts retain unknown work. It does not equalize byte costs, execute candidates, read fresh-task
+outcomes or measure improvement capacity. Candidate execution remains disabled.
+
 [MIGRATION-001.md](MIGRATION-001.md) records the implemented versioned projection
 and reservation algebra, adversarial tests and a concrete resource authorization
 proposal. Live application, durable version dispatch and candidate execution
