@@ -35,12 +35,22 @@ version, help, ELF and file-capability checks. Both runs produced the identical
 binary. The binary and corrected raw receipt are retained in Git rather than
 relying on the 30-day Actions retention window.
 
-The two receipts measured 40/40 build-orchestration child starts and
-5,619.363382 ms summed child wall time. The workflows lasted 41 and 37 seconds.
-Two upstream release downloads totaled 252,904 bytes and two artifact readbacks
-totaled 85,427 bytes.
+Publishing that evidence retriggered the pull-request workflow because GitHub
+evaluates path filters over the full pull-request diff. Unplanned run 34758156847
+therefore repeated the build before a single-use head guard could land. It
+produced the same binary, but exceeded the v2 reservation's 32-child observed
+ceiling by eight when combined with the accepted run. The run and charge are
+retained without refund and are not evidence of additional capability. Commit
+`f23852cb96b40d96c6ae6e05788d0b5d2eb3104e` added the single-use guard;
+closure reservation `ed7bd2cd10f774c0f976906bffba4f15400b647e` binds those
+final workflow bytes. Later workflow invocations skip before acquisition.
+
+The three receipts measured 60/60 build-orchestration child starts and
+8,150.450823 ms summed child wall time. The workflows lasted 41, 37 and 40
+seconds. Three upstream release downloads totaled 379,356 bytes and three
+artifact readbacks totaled 128,306 bytes.
 Bootstrap process count, APT bytes/cost, runner dollars, outer Codex/model costs
-and total dollars remain unknown. Local readback used four parent shells and 25
+and total dollars remain unknown. Local readback used five parent shells and 30
 observed child commands. There were zero namespace starts, candidate evaluations,
 native field calls, model calls or provider spend.
 

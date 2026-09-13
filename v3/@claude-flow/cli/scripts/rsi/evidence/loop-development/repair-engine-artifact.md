@@ -15,9 +15,17 @@ and binary SHA-256
 `8d921da11eaa58abdbb707f2947bb038800c5f9f57809f11621da9f0cacd02ea`.
 The binary and raw receipt are retained in Git.
 
-The initial provenance-incomplete and corrected receipts together measured 40
-child starts and 5,619.363382 ms summed child wall time; workflows elapsed 78
-seconds. Known network payloads total 338,331 bytes. Bootstrap processes, APT
+Evidence publication unintentionally retriggered the pull-request build before a
+single-use head guard landed. Run 34758156847 produced the same binary and is
+retained and charged, but the accepted plus duplicate runs exceeded the v2
+reservation's observed-child ceiling by eight. The guard in commit
+`f23852cb96b40d96c6ae6e05788d0b5d2eb3104e` now makes later invocations skip;
+closure reservation `ed7bd2cd10f774c0f976906bffba4f15400b647e` binds the final
+workflow bytes.
+
+The initial, corrected and unplanned duplicate receipts measured 60 child starts
+and 8,150.450823 ms summed child wall time; workflows elapsed 118 seconds. Known
+network payloads total 507,662 bytes. Bootstrap processes, APT
 bytes/cost, runner cost, model cost and total
 dollars are unknown. No namespace, candidate, model or native evaluation ran.
 

@@ -4,6 +4,8 @@
   "reservationCommit": "6d885c5e50ea3bd62210a0c2a856bace984c43f5",
   "sourceCommit": "d1394f0b7d4436210e10c5f2b35f25c9e5a1a889",
   "sourceTree": "7d24ff8da943a9404750d64165a012b65f127763",
+  "closureReservationCommit": "ed7bd2cd10f774c0f976906bffba4f15400b647e",
+  "singleUseGuardCommit": "f23852cb96b40d96c6ae6e05788d0b5d2eb3104e",
   "workflow": {
     "runId": 34757982794,
     "headSha": "d1394f0b7d4436210e10c5f2b35f25c9e5a1a889",
@@ -11,7 +13,10 @@
     "conclusion": "success",
     "startedAt": "2026-09-13T12:45:56Z",
     "updatedAt": "2026-09-13T12:46:33Z",
-    "firstCompletedButProvenanceIncompleteRunId": 34757629242
+    "firstCompletedButProvenanceIncompleteRunId": 34757629242,
+    "unplannedDuplicateRunId": 34758156847,
+    "unplannedDuplicateRetainedAndCharged": true,
+    "reservationObservedChildOverrun": 8
   },
   "artifact": {
     "id": 10318235508,
@@ -48,18 +53,18 @@
     "fileCapabilitiesAbsent": true,
     "reservationHashMatched": true,
     "headAndWorkflowIdentityMatched": true,
-    "localParentShells": 4,
-    "localObservedChildCommands": 25,
+    "localParentShells": 5,
+    "localObservedChildCommands": 30,
     "wallMs": null
   },
   "costs": {
-    "workflowElapsedMs": 78000,
-    "workflowRuns": 2,
-    "orchestratorChildAttempts": 40,
-    "orchestratorObservedChildStarts": 40,
-    "orchestratorSummedChildWallMs": 5619.363382,
+    "workflowElapsedMs": 118000,
+    "workflowRuns": 3,
+    "orchestratorChildAttempts": 60,
+    "orchestratorObservedChildStarts": 60,
+    "orchestratorSummedChildWallMs": 8150.4508230000015,
     "bootstrapProcessStarts": null,
-    "knownAcquisitionBytes": 338331,
+    "knownAcquisitionBytes": 507662,
     "aptAcquisitionBytes": null,
     "acquisitionUsd": null,
     "runnerUsd": null,
