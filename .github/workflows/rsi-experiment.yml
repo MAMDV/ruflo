@@ -75,6 +75,8 @@ jobs:
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/runtime-snapshot.test.mjs
       - name: Versioned inherited improver and matched-control engineering tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/inherited-improver.test.mjs
+      - name: Exposed-template patch materialization and artifact integrity tests
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/patch-materializer.test.mjs
       - name: Replay all native epochs using their original source trees
         run: >-
           node v3/@claude-flow/cli/scripts/rsi/loop/replay-history.mjs

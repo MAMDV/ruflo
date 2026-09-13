@@ -184,6 +184,15 @@ No patch bytes or repository candidates execute, so training-fit rankings are no
 fresh-task improvement-capacity evidence, do not remove the executable-repair
 proposer blocker and admit no hypothesis.
 
+[IMPROVER-002.md](IMPROVER-002.md) adds a bounded exposed-template patch
+materializer. The inherited child turns its top descriptor into a replayable
+single-replacement artifact and exactly reconstructs the published p-limit fix in
+memory without receiving the fix fixture path. It reads a researcher-authored
+grammar derived from the exposed fix; direct fixture reads are not syscall-audited. The grammar is
+that exposed fix and only the inherited arm has template coverage; this is not
+autonomous synthesis, matched-control comparison, repository execution or RSI
+evidence. Candidate execution remains disabled.
+
 [MIGRATION-001.md](MIGRATION-001.md) records the implemented versioned projection
 and reservation algebra, adversarial tests and a concrete resource authorization
 proposal. Live application, durable version dispatch and candidate execution
