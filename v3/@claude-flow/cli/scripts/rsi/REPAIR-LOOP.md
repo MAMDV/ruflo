@@ -231,6 +231,17 @@ suites and rejects missing, duplicate or merely commented references. Do not
 bypass this guard to obtain green CI; it improves validation integrity, not agent
 productivity or RSI evidence.
 
+[FRESH-ADMISSION-001.md](FRESH-ADMISSION-001.md) introduces a separate,
+metadata-only fresh-development task type. It binds the current mission ancestry
+and all six known calibration/exposed task IDs plus eleven base/fix revisions as
+mandatory exclusions. Exact schemas reject fix, patch, outcome or training-trace
+fields; provenance must state that no fix or outcome was acquired, and evaluator
+capsules must be frozen before proposal and unread by the proposer. The current
+freeze intentionally contains zero real tasks. Synthetic admission tests prove
+only the guard's mechanics. Do not call a task fresh until a reviewed public
+source archive and parent-only evaluator capsule satisfy this validator; this
+guard provides no isolation, resource authority, efficacy or RSI evidence.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family

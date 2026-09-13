@@ -54,6 +54,8 @@ jobs:
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/journal-v2.test.mjs
       - name: Frozen public repair workload admission and lineage adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/public-workloads.test.mjs
+      - name: Fresh development task partition and contamination adversarial tests
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-task-admission.test.mjs
       - name: Content-addressed public source capsule adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/public-capsules.test.mjs
       - name: Complete public Git tree inventory adversarial tests
