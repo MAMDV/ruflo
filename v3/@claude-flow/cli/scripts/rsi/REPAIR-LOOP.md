@@ -254,6 +254,18 @@ issue closes, a solution becomes exposed before proposal, content binding fails,
 or runtime separation cannot be enforced. One admitted task does not authorize
 execution or establish improvement capacity.
 
+[FRESH-STAGE-001.md](FRESH-STAGE-001.md) applies the first measured lesson from
+that freeze: validating parent-only metadata is insufficient unless the child
+surface is constructed separately. Before any proposer starts, validate source,
+evaluator and test-plan bytes in the parent, create a new source-only workspace,
+and give the child only the source receipt. Evaluator paths, hashes and bytes must
+remain in a distinct parent binding. Reject reused destinations, non-regular tar
+entries, unsafe paths, duplicate entries and unsupported metadata; stage fixed
+read-only modes instead of archive-supplied permissions. This source staging is
+not OS isolation: the compatible exclusive-UID sandbox, resource approval and a
+separate child launch remain mandatory. Roll back the staged task if any parent
+evaluator identity reaches the proposer surface or workspace.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family
