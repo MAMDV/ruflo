@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { discardRuntimeSnapshot, snapshotMounts, stagePinnedExecutable, stageRuntimeSnapshotForTest,
@@ -111,4 +111,16 @@ test('only an exactly owned content-addressed snapshot can be discarded', () => 
   assert.equal(readFileSync(join(unrelated, 'keep'), 'utf8'), 'keep');
   discardRuntimeSnapshot(snapshot, parent);
   assert.equal(existsSync(snapshot.root), false);
+}));
+
+test('snapshot root pathname replacement cannot redirect validation or cleanup', () => fixture(({ parent, specification }) => {
+  const snapshot = stageRuntimeSnapshotForTest(parent, specification);
+  chmodSync(parent, 0o700);
+  const moved = `${snapshot.root}-moved`;
+  renameSync(snapshot.root, moved);
+  mkdirSync(snapshot.root, { mode: 0o555 });
+  assert.throws(() => validateRuntimeSnapshot(snapshot), /inode identity/);
+  assert.throws(() => discardRuntimeSnapshot(snapshot, parent), /inode identity/);
+  assert(existsSync(snapshot.root));
+  assert(existsSync(moved));
 }));

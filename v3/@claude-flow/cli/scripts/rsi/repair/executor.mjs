@@ -13,6 +13,7 @@ import { sha256 } from './public-workloads.mjs';
 import { inspectRuntimeLayout, runtimeSymlinkArguments, RUNTIME_LAYOUT_HASH } from './runtime-layout.mjs';
 import { discardRuntimeSnapshot, snapshotMounts, stagePinnedExecutable, stageRuntimeSnapshot,
   validatePinnedExecutable, validateRuntimeSnapshot } from './runtime-snapshot.mjs';
+import { withFdBoundLaunch } from './fd-launch.mjs';
 
 const ROOT = dirname(new URL(import.meta.url).pathname);
 const EXPECTED_POLICY_HASH = '333f2dfe6820f1fc39f4c27050d89ea82de4834be7bae0e6b51c9bf7569dd339';
@@ -23,6 +24,7 @@ const exact = (value, keys, reason) => assert(value && typeof value === 'object'
 const fileHash = path => createHash('sha256').update(
   readBoundRegularFile(path, MAX_SOURCE_BYTES, 'executor source').bytes).digest('hex');
 const injectedFileHash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
+const descriptorIdentity = stat => ({ dev: stat.dev.toString(), ino: stat.ino.toString(), mode: stat.mode, size: stat.size });
 const readJson = (path, label) => JSON.parse(
   readBoundRegularFile(path, MAX_CONFIG_BYTES, label).bytes.toString('utf8'));
 
@@ -80,8 +82,8 @@ function buildLaunch(policy, candidateDirectory, outputDirectory, entry, runtime
     outside(output, snapshotRoot) && outside(snapshotRoot, output), 'runtime snapshot must be separate');
   assert.equal(runtimeSnapshot.runtimeLayoutHash, runtimeLayout.runtimeLayoutHash, 'snapshot runtime layout mismatch');
   assert(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(entry), 'fixed candidate entry filename');
-  const source = join(candidate, entry);
-  assert(existsSync(source) && lstatSync(source).isFile() && !lstatSync(source).isSymbolicLink() && realpathSync(source) === source, 'candidate entry file');
+  const source = join(candidate, entry), sourceStat = lstatSync(source);
+  assert(existsSync(source) && sourceStat.isFile() && !sourceStat.isSymbolicLink() && realpathSync(source) === source, 'candidate entry file');
   const args = [...policy.engine.requiredArguments];
   for (const path of policy.mounts.runtimeParents) args.push('--dir', path);
   const mounts = runtimeSnapshot.snapshotHash === 'test-only' && process.env.NODE_TEST_CONTEXT
@@ -106,6 +108,7 @@ function buildLaunch(policy, candidateDirectory, outputDirectory, entry, runtime
     runtimeIdentities: runtimeLayout.identities,
     command: enginePath, args, timeoutMs: policy.limits.wallMsPerProcess,
     maxBuffer: policy.limits.outputBytes, shell: false, candidateSha256: fileHash(source),
+    candidateDescriptorIdentity: descriptorIdentity(sourceStat),
     networkNamespaceRequired: true, candidateSourceReadOnly: true, candidateExecutionEnabled: false };
 }
 
@@ -139,7 +142,8 @@ console.log(JSON.stringify({sourceWriteError,interfaces}));`;
 function probeIsolation(policy, candidateDirectory, outputDirectory, runtimeLayout, runtimeSnapshot, engineIdentity, revalidateRuntime) {
   const launch = buildLaunch(policy, candidateDirectory, outputDirectory, 'probe.mjs', runtimeLayout, runtimeSnapshot,
     engineIdentity?.path ?? policy.engine.binary);
-  assert.equal(launch.candidateSha256, createHash('sha256').update(PROBE_SOURCE).digest('hex'), 'fixed probe bytes required');
+  const probeSha256 = createHash('sha256').update(PROBE_SOURCE).digest('hex');
+  assert.equal(launch.candidateSha256, probeSha256, 'fixed probe bytes required');
   if (revalidateRuntime) {
     const current = inspectRuntimeLayout();
     assert.deepEqual(current.identities, runtimeLayout.identities, 'runtime identity drift before spawn');
@@ -147,8 +151,28 @@ function probeIsolation(policy, candidateDirectory, outputDirectory, runtimeLayo
     validatePinnedExecutable(engineIdentity);
   }
   const started = performance.now();
-  const child = spawnSync(launch.command, launch.args, { cwd: '/', env: {}, encoding: 'utf8',
-    timeout: launch.timeoutMs, maxBuffer: launch.maxBuffer, shell: false, killSignal: 'SIGKILL' });
+  let executedLaunch = launch;
+  const spawn = (resolved, descriptorOptions = {}) => {
+    executedLaunch = resolved;
+    return spawnSync(resolved.command, resolved.args, { cwd: '/', env: {}, encoding: 'utf8',
+      timeout: resolved.timeoutMs, maxBuffer: resolved.maxBuffer, shell: false, killSignal: 'SIGKILL',
+      ...descriptorOptions });
+  };
+  const child = revalidateRuntime
+    ? withFdBoundLaunch(launch, {
+      // The currently reviewed policy pins Bubblewrap 0.9.0, which does not
+      // implement --[ro-]bind-fd. Deliberately omit the native-semantics receipt
+      // so descriptor-bound launch fails closed before spawn. A reviewed policy
+      // migration must pin 0.10.0 or later and supply that receipt.
+      engine: { ...engineIdentity, mode: 0o555, nativeBindFdSemanticsVerified: false },
+      runtimeMounts: snapshotMounts(runtimeSnapshot),
+      candidate: { directory: candidateDirectory, path: join(candidateDirectory, 'probe.mjs'),
+        target: '/workspace/probe.mjs', sha256: probeSha256, size: Buffer.byteLength(PROBE_SOURCE), mode: 0o600,
+        descriptorIdentity: launch.candidateDescriptorIdentity },
+      output: { path: outputDirectory, target: '/output',
+        descriptorIdentity: descriptorIdentity(lstatSync(outputDirectory)) },
+    }, (resolved, options) => spawn(resolved, { stdio: options.stdio }))
+    : spawn(launch);
   let observation = null;
   try { observation = JSON.parse(child.stdout); } catch { /* raw error retained */ }
   const outputPath = join(outputDirectory, 'probe');
@@ -167,11 +191,19 @@ function probeIsolation(policy, candidateDirectory, outputDirectory, runtimeLayo
     compatible: false, status: child.status, signal: child.signal, error: child.error?.code ?? null,
     stdout: child.stdout ?? '', stderr: child.stderr ?? '', observation, elapsedMs: performance.now() - started,
     outputInspectionError, runtimeSnapshotHash: launch.runtimeSnapshotHash,
+    descriptorBinding: { used: executedLaunch.descriptorBound === true,
+      pathnameReplacementExcluded: executedLaunch.pathnameReplacementExcluded === true,
+      sameUidContentMutationExcluded: executedLaunch.sameUidContentMutationExcluded === true,
+      bindings: executedLaunch.descriptorBindings ?? [] },
     parentObservedProcessStarts: child.pid > 0 ? 1 : 0,
     checks: { fixedProbeExited: child.status === 0 && !child.error && !child.signal,
       outputWritable, visibleInterfacesInternal, osSourceReadOnlyVerified: false,
       namespaceSeparationVerified: false, networkEgressDeniedVerified: false },
-    blockers: ['OS_MOUNT_AND_NAMESPACE_VERIFICATION_INCOMPLETE'],
+    blockers: [
+      ...(executedLaunch.descriptorBound ? [] : ['FD_RELATIVE_PATH_BINDING_NOT_USED']),
+      'SAME_UID_CONTENT_IMMUTABILITY_UNVERIFIED',
+      'OS_MOUNT_AND_NAMESPACE_VERIFICATION_INCOMPLETE',
+    ],
     candidateExecutionEnabled: false };
 }
 

@@ -18,6 +18,8 @@ const MAX_MANIFEST_BYTES = 1048576;
 const OWNED_SNAPSHOTS = new WeakSet();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const stableHash = value => digest(Buffer.from(JSON.stringify(value)));
+const inodeIdentity = stat => ({ dev: stat.dev.toString(), ino: stat.ino.toString() });
+const descriptorIdentity = stat => ({ ...inodeIdentity(stat), mode: stat.mode, size: stat.size });
 
 function confined(path, root, label) {
   assert(isAbsolute(path), `${label} absolute path`);
@@ -106,6 +108,7 @@ function stage(parent, specification) {
     renameSync(work, destination);
     const parentFd = openSync(parent, 'r'); try { fsyncSync(parentFd); } finally { closeSync(parentFd); }
     const snapshot = { ...identity, snapshotHash, root: destination, readOnlyStaged: true,
+      rootInodeIdentity: inodeIdentity(lstatSync(destination)),
       privilegedParentImmutabilityClaimed: false, candidateExecutionEnabled: false };
     OWNED_SNAPSHOTS.add(snapshot);
     return snapshot;
@@ -155,13 +158,16 @@ export function stagePinnedExecutable(source, destination, expectedSha256, expec
     'private canonical bwrap destination');
   const entry = copyPinnedFile(parent, { path: '/bwrap', source, sha256: expectedSha256, mode: 0o555 });
   assert.equal(entry.size, expectedSize, 'pinned executable size');
-  return { path: destination, sha256: expectedSha256, size: expectedSize, mode: 0o555 };
+  return { path: destination, sha256: expectedSha256, size: expectedSize, mode: 0o555,
+    descriptorIdentity: descriptorIdentity(lstatSync(destination)) };
 }
 
 export function validatePinnedExecutable(identity) {
   assert(identity && basename(identity.path) === 'bwrap' && /^[a-f0-9]{64}$/.test(identity.sha256),
     'pinned executable receipt');
   const opened = readBoundRegularFile(identity.path, identity.size, 'pinned executable');
+  assert.deepEqual(descriptorIdentity(lstatSync(identity.path)), identity.descriptorIdentity,
+    'pinned executable descriptor identity');
   assert.equal(opened.size, identity.size, 'pinned executable size');
   assert.equal(opened.mode, identity.mode, 'pinned executable mode');
   assert.equal(digest(opened.bytes), identity.sha256, 'pinned executable SHA-256');
@@ -178,6 +184,8 @@ export function validateRuntimeSnapshot(snapshot) {
   assert.equal(snapshot.snapshotHash, stableHash({ schema: snapshot.schema,
     runtimeLayoutHash: snapshot.runtimeLayoutHash, entries: snapshot.entries }), 'snapshot identity hash');
   assert.equal(snapshot.root, join(dirname(snapshot.root), snapshot.snapshotHash), 'content-addressed snapshot path');
+  assert.deepEqual(inodeIdentity(lstatSync(snapshot.root)), snapshot.rootInodeIdentity,
+    'snapshot root inode identity');
   assert.equal(lstatSync(snapshot.root).mode & 0o777, 0o555, 'snapshot root mode');
   const observed = [], observedDirectories = ['/'];
   function walk(directory) {
@@ -228,8 +236,9 @@ export function snapshotMounts(snapshot) {
   for (const path of [usr, node]) {
     const stat = lstatSync(path); assert(stat.isDirectory() && !stat.isSymbolicLink(), 'snapshot mount directory');
   }
-  return [{ source: usr, target: '/usr' },
-    { source: node, target: '/opt/codex/runtimes/codex-primary-runtime/dependencies/node' }];
+  return [{ source: usr, target: '/usr', descriptorIdentity: descriptorIdentity(lstatSync(usr)) },
+    { source: node, target: '/opt/codex/runtimes/codex-primary-runtime/dependencies/node',
+      descriptorIdentity: descriptorIdentity(lstatSync(node)) }];
 }
 
 export function discardRuntimeSnapshot(snapshot, parent) {
@@ -239,6 +248,8 @@ export function discardRuntimeSnapshot(snapshot, parent) {
     runtimeLayoutHash: snapshot.runtimeLayoutHash, entries: snapshot.entries }), 'snapshot identity hash');
   assert(snapshot.root === join(parent, snapshot.snapshotHash), 'owned snapshot required');
   assert(realpathSync(parent) === parent && realpathSync(snapshot.root) === snapshot.root, 'canonical owned snapshot');
+  assert.deepEqual(inodeIdentity(lstatSync(snapshot.root)), snapshot.rootInodeIdentity,
+    'owned snapshot root inode identity');
   function thaw(path) {
     const stat = lstatSync(path);
     if (stat.isSymbolicLink()) return;

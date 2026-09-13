@@ -174,6 +174,20 @@ probe, snapshot and cleanup paths are not claimed safe against a hostile same-UI
 process. Attempted-but-unobserved spawns remain charged and explicitly unknown;
 candidate execution remains disabled.
 Do not rerun the incompatible host unchanged.
+[EXECUTOR-007.md](EXECUTOR-007.md) records that the pinned Bubblewrap 0.9.0
+canonicalizes ordinary `/proc/self/fd/N` bind sources back to pathnames and thus
+cannot close the mount race. Production now fails before spawn unless reviewed
+native `--[ro-]bind-fd` semantics are present. This also prevents leaking ordinary
+inherited directory descriptors into the eventual sandbox command. The prepared
+v0.10-compatible path uses native fd binds for directories, fd-data for the fixed
+probe, descriptor execution for the engine, and detects a stale snapshot-root
+replacement before pathname-recursive cleanup. Concurrent cleanup replacement
+remains an exclusive-UID-runner requirement. It
+deliberately does not claim protection against hostile same-UID
+in-place mutation, ptrace, signals or output tampering. An exclusive-UID compatible
+runner, a separately reviewed and pinned Bubblewrap 0.10.0-or-later executable,
+and successful mount/namespace/egress probe remain required before p-limit or any
+repair candidate execution.
 
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
