@@ -1,7 +1,7 @@
 {
   "schema": "ruflo.fresh-development-task-freeze/v1",
-  "frozenAt": "2026-09-13T19:30:00.000Z",
-  "implementationParent": "af6996302c414529f88d9dbfaae0a4d66479df7b",
+  "frozenAt": "2026-09-13T21:31:00.000Z",
+  "implementationParent": "6d99e11bfb093d2a37bf8ba56446166f39f1e91f",
   "mission": {
     "id": "rsi-ruflo-loop-20260912",
     "initialAnchor": "c5c6da0b728c52414f2dff86f9d23121776d600defff0f214f1502a091f69088",
@@ -10,10 +10,10 @@
     "epochsConsumed": 7
   },
   "selection": {
-    "method": "Metadata-only pre-outcome selection; no fix, outcome, patch or task-solution bytes acquired.",
+    "method": "Fixed GitHub search selected one open zero-comment public bug before proposal; no fix commit, patch, candidate outcome or task-solution bytes were acquired.",
     "sampleFrozenBeforeProposal": true,
     "outcomeBlind": true,
-    "taskCount": 0
+    "taskCount": 1
   },
   "exclusions": {
     "calibrationCorpusGitBlob": "a1360f54bad24ee605ca27fbdd768dd2ab850101",
@@ -60,5 +60,34 @@
     "totalAcquisitionUsd": null,
     "totalEvaluationUsd": null
   },
-  "tasks": []
+  "tasks": [
+    {
+      "id": "avoid-ai-writing-291",
+      "repository": "conorbronsdon/avoid-ai-writing",
+      "cluster": "js-regex-line-boundary",
+      "license": "MIT",
+      "source": {
+        "baseCommit": "fabd62d9c8785dd0edda35201359bcc635b7d3de",
+        "baseTree": "6381e6efd018f6994fa35d6a28d8664f48a0db4b",
+        "archiveSha256": "8695115e601005956e6442a58161724b2be6e5d169dbd2c108e64c41d4ba63d3",
+        "archiveBytes": 88498,
+        "sourceUrl": "https://github.com/conorbronsdon/avoid-ai-writing/tree/fabd62d9c8785dd0edda35201359bcc635b7d3de"
+      },
+      "evaluator": {
+        "capsuleSha256": "3ae79a9217ece75129679e6de77df525fa2797b695d874daa960a5cc9769c19f",
+        "capsuleBytes": 1575,
+        "testPlanSha256": "4bed59910a502f036f67ccd68809c6107875f25de741fabb441c0a7be62a2a71",
+        "visibility": "PARENT_ONLY_UNREAD_BY_PROPOSER",
+        "authoredBeforeProposal": true
+      },
+      "provenance": {
+        "sourceKind": "PUBLIC_GITHUB_PRE_OUTCOME",
+        "selectedAt": "2026-09-13T21:25:30.000Z",
+        "selectedBeforeProposal": true,
+        "fixDataAcquired": false,
+        "outcomeRead": false,
+        "selectionQuerySha256": "0375d31e263915dfb936130e25e8d120d415423c1c6be83fcd34fd04b2b75d15"
+      }
+    }
+  ]
 }

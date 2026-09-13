@@ -56,6 +56,8 @@ jobs:
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/public-workloads.test.mjs
       - name: Fresh development task partition and contamination adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-task-admission.test.mjs
+      - name: Frozen fresh-task source and evaluator capsule adversarial tests
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-task-capsule.test.mjs
       - name: Content-addressed public source capsule adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/public-capsules.test.mjs
       - name: Complete public Git tree inventory adversarial tests

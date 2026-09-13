@@ -16,9 +16,9 @@ const synthetic = () => ({
 });
 const withTask = edit => mutate(m => { const task = synthetic(); edit?.(task, m); m.tasks = [task]; m.selection.taskCount = 1; });
 
-test('current freeze admits zero real tasks and preserves the mission lineage', () => {
+test('current freeze admits one source-bound real task and preserves the mission lineage', () => {
   const result = inspectFreshTaskFreeze(PATH);
-  assert.equal(result.freshTaskCount, 0);
+  assert.equal(result.freshTaskCount, 1);
   assert.equal(result.partitionEnforced, true);
   assert.equal(result.candidateAdmissible, false);
 });
@@ -70,7 +70,7 @@ test('task and source identities are exact, bounded and nonduplicated', () => {
 });
 
 test('task count stays bounded and must match the frozen sample', () => {
-  assert.throws(() => validateFreshTaskFreeze(mutate(m => { m.selection.taskCount = 1; })), /task count mismatch/);
+  assert.throws(() => validateFreshTaskFreeze(mutate(m => { m.selection.taskCount = 0; })), /task count mismatch/);
   assert.throws(() => validateFreshTaskFreeze(mutate(m => { m.selection.taskCount = 13; })), /bounded task count/);
 });
 
@@ -97,7 +97,7 @@ test('CLI inspection is read-only and reports the closed boundary', () => {
   const before = readFileSync(PATH), output = JSON.parse(execFileSync(process.execPath, [
     fileURLToPath(new URL('./fresh-task-admission.mjs', import.meta.url)), 'inspect', PATH,
   ], { encoding: 'utf8', timeout: 5000 }));
-  assert.equal(output.freshTaskCount, 0);
+  assert.equal(output.freshTaskCount, 1);
   assert.equal(output.candidateExecutionEnabled, false);
   assert.equal(output.boundedRsiEvidenceAccepted, false);
   assert.deepEqual(readFileSync(PATH), before);

@@ -242,6 +242,18 @@ only the guard's mechanics. Do not call a task fresh until a reviewed public
 source archive and parent-only evaluator capsule satisfy this validator; this
 guard provides no isolation, resource authority, efficacy or RSI evidence.
 
+[FRESH-FREEZE-002.md](FRESH-FREEZE-002.md) admits the first real development
+task after a fixed pre-outcome GitHub search: avoid-ai-writing issue 291 at its
+exact older base commit and tree. The complete runnable four-file source closure, parent-
+only four-case evaluator and test plan are byte-bound and checked for bounded,
+safe archive paths. The issue statement is exposed task input; no fix revision,
+patch or candidate outcome was acquired. Its base 1/4 result is task calibration,
+not a repair evaluation. The public evaluator is reviewer-visible but must be
+withheld from the proposer input and mount. Reject or roll back the task if the
+issue closes, a solution becomes exposed before proposal, content binding fails,
+or runtime separation cannot be enforced. One admitted task does not authorize
+execution or establish improvement capacity.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family
