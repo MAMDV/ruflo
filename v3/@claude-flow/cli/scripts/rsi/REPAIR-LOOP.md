@@ -175,6 +175,15 @@ process. Attempted-but-unobserved spawns remain charged and explicitly unknown;
 candidate execution remains disabled.
 Do not rerun the incompatible host unchanged.
 
+[IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
+ranking scaffold while the compatible isolation runner is unavailable. Five
+nominal arms use one deterministic mechanism to derive diagnosis, patch-family
+and test-selection state and emit successor descriptors from the exposed p-limit
+training trace; generation-zero `previous` explicitly degenerates with `frozen`.
+No patch bytes or repository candidates execute, so training-fit rankings are not
+fresh-task improvement-capacity evidence, do not remove the executable-repair
+proposer blocker and admit no hypothesis.
+
 [MIGRATION-001.md](MIGRATION-001.md) records the implemented versioned projection
 and reservation algebra, adversarial tests and a concrete resource authorization
 proposal. Live application, durable version dispatch and candidate execution
