@@ -209,6 +209,13 @@ mutation, so only the fixed capability probe can be attempted next, and only on
 a compatible exclusive-UID host. This source review does not authorize a probe,
 p-limit run, repair trial, merge or deployment.
 
+[EXECUTOR-010.md](EXECUTOR-010.md) reproduces and fixes a pre-launch FIFO hang
+in descriptor validation. Both engine and probe FIFOs timed out on original
+source and reject before the callback on fixed source using O_NONBLOCK plus
+the existing regular-file check. Read-only O_NOFOLLOW alone does not prevent
+FIFO opens from blocking. Preserve this regression when changing admission;
+it is not proof of general filesystem time bounds or OS isolation.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family

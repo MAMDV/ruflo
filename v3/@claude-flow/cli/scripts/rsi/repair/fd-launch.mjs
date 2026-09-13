@@ -45,7 +45,9 @@ function assertIdentity(fd, expected, label) {
 
 function openFile(binding, label) {
   assert(binding && typeof binding.path === 'string' && /^[a-f0-9]{64}$/.test(binding.sha256), `${label} pinned file`);
-  const fd = openSync(binding.path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  // A substituted FIFO must reach fstat without waiting for a writer. Regular
+  // files retain positional-read semantics; non-regular descriptors are rejected.
+  const fd = openSync(binding.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);
     assert(stat.isFile(), `${label} regular file`);

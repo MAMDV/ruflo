@@ -5,9 +5,31 @@ import { chmodSync, fstatSync, lstatSync, mkdtempSync, mkdirSync, readSync, rena
   symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { withFdBoundLaunch } from './fd-launch.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+
+for (const role of ['engine', 'candidate']) {
+  test(`FIFO substitution at ${role} rejects before launch without blocking`, { skip: process.platform !== 'linux' }, () => fixture(({ launch, bindings }) => {
+    const path = bindings[role].path;
+    unlinkSync(path);
+    const made = spawnSync('mkfifo', ['--', path], { timeout: 1000, encoding: 'utf8', shell: false });
+    assert.equal(made.status, 0, made.stderr);
+    // A separate bounded child prevents a regressed blocking open from hanging CI.
+    // Only the descriptor validator runs: the launch callback must never execute.
+    const script = `import assert from 'node:assert/strict';
+      import { withFdBoundLaunch } from ${JSON.stringify(new URL('./fd-launch.mjs', import.meta.url).href)};
+      let called = false;
+      assert.throws(() => withFdBoundLaunch(${JSON.stringify(launch)}, ${JSON.stringify(bindings)},
+        () => { called = true; }), /regular file/);
+      assert.equal(called, false);`;
+    const checked = spawnSync(process.execPath, ['--input-type=module', '-e', script],
+      { timeout: 1000, killSignal: 'SIGKILL', maxBuffer: 4096, encoding: 'utf8', shell: false });
+    assert.equal(checked.error, undefined, checked.error?.message);
+    assert.equal(checked.status, 0, checked.stderr);
+  }));
+}
 function readAt(fd, size) { const out = Buffer.alloc(size); assert.equal(readSync(fd, out, 0, size, 0), size); return out; }
 
 function fixture(fn) {
