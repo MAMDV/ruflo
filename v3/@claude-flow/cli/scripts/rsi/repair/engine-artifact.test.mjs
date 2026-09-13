@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateEngineBuildPlan, validateEngineObservation } from './engine-artifact.mjs';
+import { validateEngineBuildPlan, validateEngineBuildReservation, validateEngineObservation } from './engine-artifact.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const plan = () => JSON.parse(readFileSync(join(ROOT, 'engine-build-plan.json'), 'utf8'));
@@ -59,4 +59,12 @@ test('source, workflow action and legacy ledger substitutions fail closed', () =
     value => { value.build.workflowActions.checkout = '0'.repeat(40); },
     value => { value.legacyMission.nativeFieldCallsReserved = 0; },
   ]) { const value = plan(); mutate(value); assert.throws(() => validateEngineBuildPlan(value)); }
+});
+
+test('durable reservation binds every planned source byte before build', () => {
+  const repositoryRoot = resolve(ROOT, '../../../../../..');
+  const result = validateEngineBuildReservation(join(ROOT, 'engine-build-plan.json'),
+    join(ROOT, '../evidence/loop-development/repair-engine-artifact-v2.reservation.json'), repositoryRoot);
+  assert.match(result.reservationHash, /^[a-f0-9]{64}$/);
+  assert.equal(result.reservation.candidateExecutionEnabled, false);
 });

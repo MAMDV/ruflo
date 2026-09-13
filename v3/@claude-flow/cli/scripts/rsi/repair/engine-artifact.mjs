@@ -48,6 +48,36 @@ export function validateEngineBuildPlan(plan) {
   return { planHash: stableHash(plan), candidateExecutionEnabled: false };
 }
 
+export function validateEngineBuildReservation(planPath, reservationPath, repositoryRoot) {
+  assert(isAbsolute(planPath) && isAbsolute(reservationPath) && isAbsolute(repositoryRoot), 'absolute reservation inputs');
+  const planBytes = readFileSync(planPath), plan = JSON.parse(planBytes);
+  validateEngineBuildPlan(plan);
+  const reservationBytes = readFileSync(reservationPath), reservation = JSON.parse(reservationBytes);
+  exact(reservation, ['schema','mission','parentHead','planSha256','plannedSourceFiles','upstream','startedAt','scope',
+    'reservedEngineeringParentProcessStarts','reservedObservedChildProcessStarts','reservedWallMs',
+    'repairCandidateEvaluations','isolatedProcessStarts','nativeFieldCalls','externalProviderSpendUsd','totalUsd',
+    'retainOnInterruption','missionBudgetChanged','resourceAuthorizationPresent','candidateExecutionEnabled',
+    'boundedRsiEvidenceAccepted'], 'reservation');
+  assert.equal(reservation.schema, 'ruflo.repair-engine-artifact-engineering-reservation/v1');
+  assert.equal(reservation.planSha256, digest(planBytes), 'reserved plan bytes');
+  assert.deepEqual(reservation.upstream, {
+    rejectedVersion: plan.source.rejectedVersion, advisory: 'GHSA-pxhw-h44j-8pfx',
+    selectedVersion: '0.12.0', releaseCommit: plan.source.releaseCommit,
+    releaseTree: plan.source.releaseTree, releaseAssetSha256: plan.source.releaseAssetSha256,
+  });
+  assert(Object.keys(reservation.plannedSourceFiles).length >= 3, 'complete planned source set');
+  for (const [path, expected] of Object.entries(reservation.plannedSourceFiles)) {
+    assert(/^[a-f0-9]{64}$/.test(expected) && !path.startsWith('/') && !path.split('/').includes('..'), 'safe source binding');
+    assert.equal(digest(readFileSync(join(repositoryRoot, path))), expected, `reserved source bytes: ${path}`);
+  }
+  assert.equal(reservation.repairCandidateEvaluations, 0); assert.equal(reservation.isolatedProcessStarts, 0);
+  assert.equal(reservation.nativeFieldCalls, 0); assert.equal(reservation.externalProviderSpendUsd, 0);
+  assert.equal(reservation.totalUsd, null); assert.equal(reservation.retainOnInterruption, true);
+  assert.equal(reservation.missionBudgetChanged, false); assert.equal(reservation.resourceAuthorizationPresent, false);
+  assert.equal(reservation.candidateExecutionEnabled, false); assert.equal(reservation.boundedRsiEvidenceAccepted, false);
+  return { reservationHash: digest(reservationBytes), reservation, plan };
+}
+
 function runObserved(command, args, options, costs) {
   const started = performance.now();
   const child = spawnSync(command, args, { cwd: options.cwd, env: options.env ?? process.env,
@@ -91,6 +121,16 @@ export function validateEngineObservation(plan, observation) {
   assert(!observation.elf.needed.includes('libselinux.so.1'), 'SELinux dependency must be disabled');
   assert.equal(observation.runner.imageOS, 'ubuntu24');
   assert.equal(observation.runner.architecture, 'x64');
+  exact(observation.costs, ['childAttempts','observedChildProcessStarts','summedChildWallMs','bootstrapProcessStarts',
+    'acquisitionBytes','acquisitionUsd','buildRunnerUsd','modelCalls','candidateEvaluations','isolatedProcessStarts',
+    'nativeFieldCalls','externalProviderSpendUsd','totalUsd'], 'costs');
+  assert(Number.isSafeInteger(observation.costs.childAttempts) && observation.costs.childAttempts > 0);
+  assert.equal(observation.costs.observedChildProcessStarts, observation.costs.childAttempts);
+  assert(Number.isFinite(observation.costs.summedChildWallMs) && observation.costs.summedChildWallMs >= 0);
+  assert.equal(observation.costs.bootstrapProcessStarts, null);
+  assert.equal(observation.costs.acquisitionBytes, observation.sourceAssetBytes);
+  assert.equal(observation.costs.acquisitionUsd, null); assert.equal(observation.costs.buildRunnerUsd, null);
+  assert.equal(observation.costs.modelCalls, 0); assert.equal(observation.costs.nativeFieldCalls, 0);
   assert.equal(observation.costs.candidateEvaluations, 0);
   assert.equal(observation.costs.isolatedProcessStarts, 0);
   assert.equal(observation.costs.externalProviderSpendUsd, 0);
@@ -100,8 +140,22 @@ export function validateEngineObservation(plan, observation) {
 
 export function recordEngineArtifact(workRoot, receiptPath, planPath = PLAN_PATH) {
   assert(isAbsolute(workRoot) && isAbsolute(receiptPath), 'absolute paths required');
-  const plan = JSON.parse(readFileSync(planPath, 'utf8'));
+  const repositoryRoot = process.env.GITHUB_WORKSPACE ? realpathSync(process.env.GITHUB_WORKSPACE) : null;
+  const reservationPath = process.env.RUFLO_ENGINE_RESERVATION;
+  assert(repositoryRoot && reservationPath && isAbsolute(reservationPath), 'durable CI reservation required');
+  const reservationCheck = validateEngineBuildReservation(planPath, reservationPath, repositoryRoot);
+  const plan = reservationCheck.plan;
   const { planHash } = validateEngineBuildPlan(plan);
+  const invocation = {
+    repository: process.env.GITHUB_REPOSITORY ?? null, headSha: process.env.RUFLO_ENGINE_HEAD_SHA ?? null,
+    eventName: process.env.GITHUB_EVENT_NAME ?? null, runId: process.env.GITHUB_RUN_ID ?? null,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null, workflowRef: process.env.GITHUB_WORKFLOW_REF ?? null,
+    workflowFileSha256: digest(readFileSync(join(repositoryRoot, '.github/workflows/rsi-engine-artifact.yml'))),
+  };
+  assert.equal(invocation.repository, 'ruvnet/ruflo'); assert.match(invocation.headSha ?? '', /^[a-f0-9]{40}$/);
+  assert.equal(invocation.eventName, 'pull_request'); assert.match(invocation.runId ?? '', /^[1-9][0-9]*$/);
+  assert.match(invocation.runAttempt ?? '', /^[1-9][0-9]*$/);
+  assert(invocation.workflowRef?.includes('/.github/workflows/rsi-engine-artifact.yml@'));
   mkdirSync(workRoot, { recursive: false, mode: 0o700 });
   const sourceArchive = join(workRoot, 'bubblewrap.tar.xz');
   const source = join(workRoot, 'source'), build = join(workRoot, 'build'), artifact = join(workRoot, 'artifact');
@@ -144,6 +198,8 @@ export function recordEngineArtifact(workRoot, receiptPath, planPath = PLAN_PATH
   };
   validateEngineObservation(plan, observation);
   const receipt = { schema: 'ruflo.repair-isolation-engine-artifact/v1', planHash,
+    invocation, reservation: { path: reservationPath.slice(repositoryRoot.length + 1),
+      sha256: reservationCheck.reservationHash, parentHead: reservationCheck.reservation.parentHead },
     source: plan.source, observation, proofBoundary: plan.proofBoundary,
     legacyMission: plan.legacyMission, candidateExecutionEnabled: false, boundedRsiEvidenceAccepted: false };
   durableNew(receiptPath, receipt);

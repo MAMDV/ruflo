@@ -6,17 +6,17 @@ on:
       - 'v3/@claude-flow/cli/scripts/rsi/repair/engine-artifact.test.mjs'
       - 'v3/@claude-flow/cli/scripts/rsi/repair/engine-build-plan.json'
       - '.github/workflows/rsi-engine-artifact.yml'
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -28,6 +28,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y binutils build-essential curl libcap-dev meson ninja-build pkg-config xz-utils
       - name: Build and attest patched isolation engine without launching a namespace
+        env:
+          RUFLO_ENGINE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUFLO_ENGINE_RESERVATION: ${{ github.workspace }}/v3/@claude-flow/cli/scripts/rsi/evidence/loop-development/repair-engine-artifact-v2.reservation.json
         run: >-
           node v3/@claude-flow/cli/scripts/rsi/repair/engine-artifact.mjs build
           "$RUNNER_TEMP/rsi-engine-build"
