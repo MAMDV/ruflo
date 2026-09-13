@@ -25,7 +25,7 @@ test('materializer plan binds the inherited descriptor source and closes all exe
   assert.equal(plan.task.partition, 'TRAINING_ONLY_CALIBRATION');
   assert.equal(plan.proofBoundary.exposedFixDerivedRuleReadByChild, true);
   assert.equal(plan.proofBoundary.knownFixFixturePathProvided, false);
-  assert.equal(plan.proofBoundary.knownFixFixtureReadNotObserved, true);
+  assert.equal(plan.proofBoundary.knownFixFixtureReadAuditPerformed, false);
   assert.equal(plan.proofBoundary.candidateExecutionEnabled, false);
 });
 
@@ -168,7 +168,7 @@ test('one child process materializes the patch without receiving the known-fix f
     nativeFieldCalls: 0, modelCalls: 0, externalProviderSpendUsd: 0, totalEngineeringUsd: null });
   assert.equal(result.exposedFixDerivedRuleReadByChild, true);
   assert.equal(result.knownFixFixturePathProvided, false);
-  assert.equal(result.knownFixFixtureReadNotObserved, true);
+  assert.equal(result.knownFixFixtureReadAuditPerformed, false);
   assert.equal(result.repositoryPatchApplied, false);
   assert.equal(result.candidateExecutionEnabled, false);
 });

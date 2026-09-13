@@ -57,7 +57,7 @@
     "ruleResearcherAuthoredFromExposedFix": true,
     "exposedFixDerivedRuleReadByChild": true,
     "knownFixFixturePathProvided": false,
-    "knownFixFixtureReadNotObserved": true,
+    "knownFixFixtureReadAuditPerformed": false,
     "freshTaskOutcomesRead": false,
     "matchedControlPatchCoverage": false,
     "empiricalHypothesisAdmitted": false,

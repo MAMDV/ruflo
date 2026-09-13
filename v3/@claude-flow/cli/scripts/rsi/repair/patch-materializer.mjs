@@ -10,8 +10,8 @@ import { loadImproverPlan, PLAN_HASH, RAW_PLAN_SHA256, runImproverChild,
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const MATERIALIZER_PLAN_PATH = join(ROOT, 'patch-materializer-plan.json');
-export const MATERIALIZER_PLAN_HASH = '30cbb74f941a2e23c832bb6535bef45805a80f0b1e432339a5b0701a27e148c7';
-export const MATERIALIZER_RAW_SHA256 = 'd7e2b0897a4ff8c6a0009f19f23a94cbe9557752c333d28268671d44f5a9ad71';
+export const MATERIALIZER_PLAN_HASH = '525b8e6f4818d76c314d68fa7c02a4b7f05c41249c7ed463063063ba19e5ea8b';
+export const MATERIALIZER_RAW_SHA256 = '4aef281fdbe07346395a4a25367d9a126677e00e9044a7779f796f71ae417b33';
 const MAX_PLAN_BYTES = 1024 * 1024;
 
 const exact = (value, keys, label) => assert(value && typeof value === 'object' && !Array.isArray(value) &&
@@ -82,7 +82,7 @@ export function validateMaterializerPlan(plan) {
     modelCalls: 0, externalProviderSpendUsd: 0 });
   assert.deepEqual(plan.proofBoundary, { engineeringOnly: true,
     ruleResearcherAuthoredFromExposedFix: true, exposedFixDerivedRuleReadByChild: true,
-    knownFixFixturePathProvided: false, knownFixFixtureReadNotObserved: true,
+    knownFixFixturePathProvided: false, knownFixFixtureReadAuditPerformed: false,
     freshTaskOutcomesRead: false, matchedControlPatchCoverage: false,
     empiricalHypothesisAdmitted: false, repositoryPatchApplied: false,
     repairCandidateEvaluated: false, resourceProposalApproved: false,
@@ -206,7 +206,7 @@ export function runPatchMaterializerChild(materializerPlan, expectedMaterializer
       repairCandidateEvaluations: 0, isolatedProcessStarts: 0, nativeFieldCalls: 0,
       modelCalls: 0, externalProviderSpendUsd: 0, totalEngineeringUsd: null },
     researcherCoachingAfterSpawn: false, exposedFixDerivedRuleReadByChild: true,
-    knownFixFixturePathProvided: false, knownFixFixtureReadNotObserved: true,
+    knownFixFixturePathProvided: false, knownFixFixtureReadAuditPerformed: false,
     repositoryPatchApplied: false, repairCandidateEvaluated: false,
     freshTaskOutcomesRead: false, matchedControlPatchCoverage: false,
     candidateExecutionEnabled: false, improvementCapacityMeasured: false,
