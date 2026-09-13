@@ -223,6 +223,14 @@ untrusted bounded regular-file admission path must retain O_NONBLOCK before its
 regular-file check. This closes the reproduced FIFO case only; it does not prove
 same-UID immutability, general filesystem time bounds or OS isolation.
 
+[LOOP-GUIDANCE-002.md](LOOP-GUIDANCE-002.md) makes focused-test registration
+fail closed after EXECUTOR-011 retained a green CI run that omitted its new suite.
+Every regular repair test file must have exactly one direct executable reference
+in the bounded-RSI workflow. The coverage audit runs before the remaining repair
+suites and rejects missing, duplicate or merely commented references. Do not
+bypass this guard to obtain green CI; it improves validation integrity, not agent
+productivity or RSI evidence.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family

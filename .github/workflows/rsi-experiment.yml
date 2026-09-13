@@ -65,6 +65,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.19.0'
+      - name: Fail-closed repair test coverage audit
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/ci-coverage.test.mjs
       - name: Offline p-limit historical runtime witness and admission tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/p-limit-offline.test.mjs
       - name: Fail-closed isolated candidate executor contract tests
