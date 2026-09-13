@@ -2,19 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import * as executor from './executor.mjs';
 import { sha256 } from './public-workloads.mjs';
 const { validateExecutorPolicy, buildIsolationLaunchForTest: buildIsolationLaunch, inspectExecutor, recordIsolationProbeForTest: recordIsolationProbe, reserveCandidateExecution, fixedProbeSource } = executor;
+const ENGINE_PATH = fileURLToPath(new URL('./engine/bwrap-v0.12.0-linux-x64', import.meta.url));
 
 // Simulated host/child responses only: unit tests never execute the incompatible
 // local engine. Actual capability receipts are separately reserved artifacts.
 function simulatedEngine(t, spawn, fn) {
   const originalRead = fs.readFileSync, originalExists = fs.existsSync;
-  t.mock.method(fs, 'readFileSync', (path, ...args) => path === '/usr/bin/bwrap' ? Buffer.from('simulated-engine') : originalRead(path, ...args));
-  t.mock.method(fs, 'existsSync', path => path === '/usr/bin/bwrap' || originalExists(path));
+  t.mock.method(fs, 'readFileSync', (path, ...args) => path === ENGINE_PATH ? Buffer.from('simulated-engine') : originalRead(path, ...args));
+  t.mock.method(fs, 'existsSync', path => path === ENGINE_PATH || originalExists(path));
   t.mock.method(childProcess, 'spawnSync', spawn);
   syncBuiltinESMExports();
   try { return fn(); } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
@@ -32,7 +34,9 @@ function temporary(fn) {
 test('policy pins isolation, equal controls, original usage and zero authorization', () => {
   const result = validateExecutorPolicy(policy());
   assert.match(result.policyHash, /^[a-f0-9]{64}$/);
-  assert.equal(result.nativeBindFdSemanticsVerified, false);
+  assert.equal(result.nativeBindFdSemanticsVerified, true);
+  assert.deepEqual(policy().engine.needed, ['libcap.so.2','libc.so.6']);
+  assert.equal(policy().engine.sourceReview.sameUidContentImmutabilityVerified, false);
   assert.equal(result.candidateExecutionEnabled, false);
 });
 test('policy changes cannot authorize execution or weaken any limit', () => {
@@ -149,7 +153,7 @@ test('existing reservation and forged policy cannot reach a child process', t =>
 }));
 
 test('unsupported or malformed engine versions stop before namespace launch', t => temporary(({ root }) => {
-  for (const [i, version] of ['bubblewrap 0.8.9\n', 'bubblewrap latest', 'bubblewrap 0.9.0\nextra'].entries()) {
+  for (const [i, version] of ['bubblewrap 0.11.0\n', 'bubblewrap latest', 'bubblewrap 0.12.0\nextra'].entries()) {
     let attempts = 0;
     const receipt = simulatedEngine(t, () => {
       attempts++; return { pid: 123, status: 0, signal: null, stdout: version, stderr: '' };
@@ -163,11 +167,11 @@ test('unsupported or malformed engine versions stop before namespace launch', t 
 test('engine replacement during version discovery prevents namespace launch', t => temporary(({ root }) => {
   const originalRead = fs.readFileSync, originalExists = fs.existsSync;
   let changed = false, calls = 0;
-  t.mock.method(fs, 'readFileSync', (path, ...args) => path === '/usr/bin/bwrap'
+  t.mock.method(fs, 'readFileSync', (path, ...args) => path === ENGINE_PATH
     ? Buffer.from(changed ? 'replacement-engine' : 'original-engine') : originalRead(path, ...args));
-  t.mock.method(fs, 'existsSync', path => path === '/usr/bin/bwrap' || originalExists(path));
+  t.mock.method(fs, 'existsSync', path => path === ENGINE_PATH || originalExists(path));
   t.mock.method(childProcess, 'spawnSync', () => {
-    calls++; changed = true; return { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.9.0', stderr: '' };
+    calls++; changed = true; return { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.12.0\n', stderr: '' };
   });
   syncBuiltinESMExports();
   try {
@@ -182,9 +186,9 @@ test('engine replacement during version discovery prevents namespace launch', t 
 test('only private fixed bytes are staged; permission denial is not OS isolation', t => temporary(({ root }) => {
   let attempts = 0;
   const receipt = simulatedEngine(t, (command, args, options) => {
-    assert.equal(command, '/usr/bin/bwrap');
+    assert.equal(command, ENGINE_PATH);
     assert.deepEqual(options.env, {});
-    if (++attempts === 1) return { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.9.0\n', stderr: '' };
+    if (++attempts === 1) return { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.12.0\n', stderr: '' };
     const inputAt = args.lastIndexOf('--ro-bind'), outputAt = args.indexOf('--bind');
     const staged = args[inputAt + 1], output = args[outputAt + 1];
     assert.equal(readFileSync(join(staged, 'probe.mjs'), 'utf8'), fixedProbeSource());
@@ -206,7 +210,7 @@ test('malformed fixed-probe observations are retained without false compatibilit
   for (const [i, stdout] of ['not-json', '{}', '{"interfaces":null}', '{"interfaces":[null]}'].entries()) {
     let calls = 0;
     const receipt = simulatedEngine(t, () => ++calls === 1
-      ? { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.9.0', stderr: '' }
+      ? { pid: 1, status: 0, signal: null, stdout: 'bubblewrap 0.12.0\n', stderr: '' }
       : { pid: 2, status: 0, signal: null, stdout, stderr: 'raw diagnostic' },
     () => recordIsolationProbe(join(root, `malformed-${i}.json`)));
     assert.equal(receipt.capability.stdout, stdout);

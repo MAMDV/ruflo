@@ -16,7 +16,7 @@ import { discardRuntimeSnapshot, snapshotMounts, stagePinnedExecutable, stageRun
 import { withFdBoundLaunch } from './fd-launch.mjs';
 
 const ROOT = dirname(new URL(import.meta.url).pathname);
-const EXPECTED_POLICY_HASH = '333f2dfe6820f1fc39f4c27050d89ea82de4834be7bae0e6b51c9bf7569dd339';
+const EXPECTED_POLICY_HASH = '3fd78d80bf860f8e3d219368879a03c8b3b97f89121ade3eded55c1b53e37720';
 const MAX_CONFIG_BYTES = 1048576;
 const MAX_SOURCE_BYTES = 134217728;
 const exact = (value, keys, reason) => assert(value && typeof value === 'object' && !Array.isArray(value) &&
@@ -30,15 +30,38 @@ const readJson = (path, label) => JSON.parse(
 
 export function validateExecutorPolicy(policy) {
   exact(policy, ['schema','purpose','engine','limits','environment','mounts','probe','controls','resourceProposal','legacyMission','candidateExecutionEnabled','boundedRsiEvidenceAccepted'], 'executor policy fields');
-  assert.equal(policy.schema, 'ruflo.repair-isolated-executor-policy/v1');
+  assert.equal(policy.schema, 'ruflo.repair-isolated-executor-policy/v2');
   assert.equal(sha256(policy), EXPECTED_POLICY_HASH, 'executor policy hash mismatch');
-  exact(policy.engine, ['name','minimumVersion','binary','sha256','sizeBytes','requiredArguments','networkMode','rootMode','candidateSourceMode','outputMode','shellEnabled'], 'engine fields');
+  exact(policy.engine, ['name','minimumVersion','repositoryPath','sha256','sizeBytes','mode','needed',
+    'rpath','runpath','requiredArguments','forbiddenArguments','networkMode','rootMode',
+    'candidateSourceMode','outputMode','shellEnabled','sourceReview','artifactEvidence'], 'engine fields');
   assert.deepEqual(policy.engine, {
-    name: 'bubblewrap', minimumVersion: '0.9.0', binary: '/usr/bin/bwrap',
-    sha256: '52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712', sizeBytes: 72160,
+    name: 'bubblewrap', minimumVersion: '0.12.0',
+    repositoryPath: 'engine/bwrap-v0.12.0-linux-x64',
+    sha256: '8d921da11eaa58abdbb707f2947bb038800c5f9f57809f11621da9f0cacd02ea',
+    sizeBytes: 96680, mode: 0o555, needed: ['libcap.so.2','libc.so.6'], rpath: [], runpath: [],
     requiredArguments: ['--unshare-all','--die-with-parent','--new-session','--cap-drop','ALL','--clearenv'],
+    forbiddenArguments: ['--not-a-security-boundary'],
     networkMode: 'NEW_EMPTY_NETWORK_NAMESPACE', rootMode: 'ALLOWLISTED_READ_ONLY_BINDS',
     candidateSourceMode: 'READ_ONLY', outputMode: 'DEDICATED_WRITABLE_BIND', shellEnabled: false,
+    sourceReview: {
+      releaseTag: 'v0.12.0', releaseCommit: '2a76602a8c71f36c1527cf9fc3417d9149822e0c',
+      releaseTree: '021e149edf2e8b9f4a0339e0b5cc0075d299c9a9',
+      releaseAssetSha256: '9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314',
+      bubblewrapSourceBlob: '9192550540d3c4f173a7308c11e518e18ef4c303',
+      upstreamBindFdTestBlob: 'e608d4a847014029d5c7c24e8f4db25cfe255a38',
+      reviewedSourceRegions: ['bubblewrap.c:924-941','bubblewrap.c:1264-1306',
+        'bubblewrap.c:1977-1999','bubblewrap.c:2220-2234','tests/test-run.sh:564-568'],
+      nativeBindFdSemanticsVerified: true, postMountDeviceAndInodeCheckVerified: true,
+      roBindFlagPropagationVerified: true, roBindDataCopiesFromInheritedFdVerified: true,
+      sameUidContentImmutabilityVerified: false,
+    },
+    artifactEvidence: {
+      buildSourceCommit: 'd1394f0b7d4436210e10c5f2b35f25c9e5a1a889',
+      finalEvidenceCommit: '2ac55f65a1ba15b1386ea100cfbf532fc2f8cfb1',
+      correctedReceiptSha256: 'd99ced2329c1b1c1071863b2746afc7bf7a40d659bfec2cffdf5b68bb95a63e4',
+      protectedPublicationProvenanceVerified: false, reproducibleToolchainVerified: false,
+    },
   });
   assert.deepEqual(policy.limits, { wallMsPerProcess: 5000, addressSpaceBytes: 536870912,
     cpuSeconds: 5, openFiles: 64, processes: 16, outputBytes: 65536 });
@@ -58,11 +81,15 @@ export function validateExecutorPolicy(policy) {
   assert.equal(policy.legacyMission.originalAnchor, 'c5c6da0b728c52414f2dff86f9d23121776d600defff0f214f1502a091f69088');
   assert.equal(policy.candidateExecutionEnabled, false);
   assert.equal(policy.boundedRsiEvidenceAccepted, false);
-  // This exact policy pins 0.9.0. Its parser has no native --[ro-]bind-fd,
-  // so production admission remains false until a reviewed policy migration
-  // binds a replacement engine identity and its source semantics together.
-  return { policyHash: EXPECTED_POLICY_HASH, nativeBindFdSemanticsVerified: false,
+  return { policyHash: EXPECTED_POLICY_HASH, nativeBindFdSemanticsVerified: true,
     candidateExecutionEnabled: false };
+}
+
+function engineSourcePath(policy) {
+  const source = resolve(ROOT, policy.engine.repositoryPath);
+  assert.equal(relative(ROOT, source), policy.engine.repositoryPath,
+    'engine repository path must remain inside repair root');
+  return source;
 }
 
 function confinedDirectory(path, label) {
@@ -107,6 +134,8 @@ function buildLaunch(policy, candidateDirectory, outputDirectory, entry, runtime
     `--nproc=${policy.limits.processes}`, '--',
     '/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node',
     '--permission', '--allow-fs-read=/workspace', '--allow-fs-write=/output', `/workspace/${entry}`);
+  for (const forbidden of policy.engine.forbiddenArguments)
+    assert(!args.includes(forbidden), `forbidden engine argument: ${forbidden}`);
   return { schema: 'ruflo.repair-isolation-launch/v2', policyHash: check.policyHash,
     runtimeLayoutHash: runtimeLayout.runtimeLayoutHash, runtimeSnapshotHash: runtimeSnapshot.snapshotHash,
     runtimeIdentities: runtimeLayout.identities,
@@ -131,7 +160,7 @@ export function buildIsolationLaunchForTest(policy, candidateDirectory, outputDi
     identities: { node: {}, prlimit: {}, interpreter: {} },
     syntheticSymlinks: [{ target: 'usr/lib', link: '/lib' }, { target: 'usr/lib64', link: '/lib64' }],
   }, { root: realpathSync(snapshotRoot), snapshotHash: 'test-only', runtimeLayoutHash: RUNTIME_LAYOUT_HASH,
-    readOnlyStaged: true, candidateExecutionEnabled: false }, policy.engine.binary);
+    readOnlyStaged: true, candidateExecutionEnabled: false }, engineSourcePath(policy));
 }
 
 const PROBE_SOURCE = `import fs from 'node:fs';import os from 'node:os';
@@ -145,7 +174,7 @@ console.log(JSON.stringify({sourceWriteError,interfaces}));`;
 // the module-owned fixed bytes in its own private temporary directory.
 function probeIsolation(policy, candidateDirectory, outputDirectory, runtimeLayout, runtimeSnapshot, engineIdentity, revalidateRuntime) {
   const launch = buildLaunch(policy, candidateDirectory, outputDirectory, 'probe.mjs', runtimeLayout, runtimeSnapshot,
-    engineIdentity?.path ?? policy.engine.binary);
+    engineIdentity?.path ?? engineSourcePath(policy));
   const probeSha256 = createHash('sha256').update(PROBE_SOURCE).digest('hex');
   assert.equal(launch.candidateSha256, probeSha256, 'fixed probe bytes required');
   if (revalidateRuntime) {
@@ -164,11 +193,8 @@ function probeIsolation(policy, candidateDirectory, outputDirectory, runtimeLayo
   };
   const child = revalidateRuntime
     ? withFdBoundLaunch(launch, {
-      // The currently reviewed policy pins Bubblewrap 0.9.0, which does not
-      // implement --[ro-]bind-fd. Deliberately omit the native-semantics receipt
-      // so descriptor-bound launch fails closed before spawn. A reviewed policy
-      // migration must pin 0.10.0 or later and supply that receipt.
-      engine: { ...engineIdentity, mode: 0o555, nativeBindFdSemanticsVerified: false },
+      engine: { ...engineIdentity, mode: policy.engine.mode,
+        nativeBindFdSemanticsVerified: policy.engine.sourceReview.nativeBindFdSemanticsVerified },
       runtimeMounts: snapshotMounts(runtimeSnapshot),
       candidate: { directory: candidateDirectory, path: join(candidateDirectory, 'probe.mjs'),
         target: '/workspace/probe.mjs', sha256: probeSha256, size: Buffer.byteLength(PROBE_SOURCE), mode: 0o600,
@@ -220,10 +246,7 @@ function durableNew(path, value) {
 
 function supportedVersion(version) {
   if (version.status !== 0 || version.error || version.signal) return false;
-  const match = /^bubblewrap (\d+)\.(\d+)\.(\d+)\s*$/.exec(version.stdout ?? '');
-  if (!match) return false;
-  const parts = match.slice(1).map(Number);
-  return parts.every(Number.isSafeInteger) && (parts[0] > 0 || parts[1] >= 9);
+  return version.stdout === 'bubblewrap 0.12.0\n';
 }
 
 function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
@@ -251,17 +274,18 @@ function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
     let versionObservationComplete = true;
     let version = { pid: null, status: null, signal: null, error: null, stdout: '', stderr: '' };
     let engineUnchanged = false;
+    const sourceEnginePath = engineSourcePath(policy);
     if (injectedRuntimeLayout) {
       // Test-only injection keeps mocked pathname reads separate from the
       // production descriptor-bound engine staging path.
-      engineHash = existsSync(policy.engine.binary) ? injectedFileHash(policy.engine.binary) : null;
-      version = spawnSync(policy.engine.binary, ['--version'], { env: {}, cwd: '/', encoding: 'utf8', timeout: 1000, maxBuffer: 4096, shell: false, killSignal: 'SIGKILL' });
+      engineHash = existsSync(sourceEnginePath) ? injectedFileHash(sourceEnginePath) : null;
+      version = spawnSync(sourceEnginePath, ['--version'], { env: {}, cwd: '/', encoding: 'utf8', timeout: 1000, maxBuffer: 4096, shell: false, killSignal: 'SIGKILL' });
       versionAttempted = true;
-      engineUnchanged = engineHash !== null && existsSync(policy.engine.binary) && engineHash === injectedFileHash(policy.engine.binary);
+      engineUnchanged = engineHash !== null && existsSync(sourceEnginePath) && engineHash === injectedFileHash(sourceEnginePath);
     } else {
       const engineDirectory = join(temp, 'engine'); mkdirSync(engineDirectory, { mode: 0o700 });
       try {
-        engineIdentity = stagePinnedExecutable(policy.engine.binary, join(engineDirectory, 'bwrap'),
+        engineIdentity = stagePinnedExecutable(sourceEnginePath, join(engineDirectory, 'bwrap'),
           policy.engine.sha256, policy.engine.sizeBytes);
         engineHash = engineIdentity.sha256;
         versionAttempted = true;
@@ -303,7 +327,8 @@ function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
       runtimeIdentities: runtimeLayout.identities,
       executorSourceSha256: reservation.executorSourceSha256, fixedProbeSha256: reservation.fixedProbeSha256,
       host: { platform: platform(), release: release(), arch: arch() },
-      engine: { sourcePath: policy.engine.binary, stagedPathUsed: engineIdentity !== null, sha256: engineHash,
+      engine: { sourcePath: sourceEnginePath, repositoryPath: policy.engine.repositoryPath,
+        stagedPathUsed: engineIdentity !== null, sha256: engineHash,
         expectedSha256: policy.engine.sha256, expectedSizeBytes: policy.engine.sizeBytes,
         stageError: engineStageError, unchangedAfterVersion: engineUnchanged,
         nativeBindFdSemanticsVerified: nativeBindFdAdmitted,

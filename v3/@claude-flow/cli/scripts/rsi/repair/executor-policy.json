@@ -1,18 +1,44 @@
 {
-  "schema": "ruflo.repair-isolated-executor-policy/v1",
-  "purpose": "Fail-closed operating-system isolation contract for future public development repair candidates. This reviewed policy cannot grant resource authorization or run candidates in the current mission.",
+  "schema": "ruflo.repair-isolated-executor-policy/v2",
+  "purpose": "Fail-closed operating-system isolation contract for the fixed public-development capability probe. This reviewed policy cannot grant repair-resource authorization or execute candidates.",
   "engine": {
     "name": "bubblewrap",
-    "minimumVersion": "0.9.0",
-    "binary": "/usr/bin/bwrap",
-    "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
-    "sizeBytes": 72160,
+    "minimumVersion": "0.12.0",
+    "repositoryPath": "engine/bwrap-v0.12.0-linux-x64",
+    "sha256": "8d921da11eaa58abdbb707f2947bb038800c5f9f57809f11621da9f0cacd02ea",
+    "sizeBytes": 96680,
+    "mode": 365,
+    "needed": ["libcap.so.2", "libc.so.6"],
+    "rpath": [],
+    "runpath": [],
     "requiredArguments": ["--unshare-all", "--die-with-parent", "--new-session", "--cap-drop", "ALL", "--clearenv"],
+    "forbiddenArguments": ["--not-a-security-boundary"],
     "networkMode": "NEW_EMPTY_NETWORK_NAMESPACE",
     "rootMode": "ALLOWLISTED_READ_ONLY_BINDS",
     "candidateSourceMode": "READ_ONLY",
     "outputMode": "DEDICATED_WRITABLE_BIND",
-    "shellEnabled": false
+    "shellEnabled": false,
+    "sourceReview": {
+      "releaseTag": "v0.12.0",
+      "releaseCommit": "2a76602a8c71f36c1527cf9fc3417d9149822e0c",
+      "releaseTree": "021e149edf2e8b9f4a0339e0b5cc0075d299c9a9",
+      "releaseAssetSha256": "9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314",
+      "bubblewrapSourceBlob": "9192550540d3c4f173a7308c11e518e18ef4c303",
+      "upstreamBindFdTestBlob": "e608d4a847014029d5c7c24e8f4db25cfe255a38",
+      "reviewedSourceRegions": ["bubblewrap.c:924-941", "bubblewrap.c:1264-1306", "bubblewrap.c:1977-1999", "bubblewrap.c:2220-2234", "tests/test-run.sh:564-568"],
+      "nativeBindFdSemanticsVerified": true,
+      "postMountDeviceAndInodeCheckVerified": true,
+      "roBindFlagPropagationVerified": true,
+      "roBindDataCopiesFromInheritedFdVerified": true,
+      "sameUidContentImmutabilityVerified": false
+    },
+    "artifactEvidence": {
+      "buildSourceCommit": "d1394f0b7d4436210e10c5f2b35f25c9e5a1a889",
+      "finalEvidenceCommit": "2ac55f65a1ba15b1386ea100cfbf532fc2f8cfb1",
+      "correctedReceiptSha256": "d99ced2329c1b1c1071863b2746afc7bf7a40d659bfec2cffdf5b68bb95a63e4",
+      "protectedPublicationProvenanceVerified": false,
+      "reproducibleToolchainVerified": false
+    }
   },
   "limits": {
     "wallMsPerProcess": 5000,
