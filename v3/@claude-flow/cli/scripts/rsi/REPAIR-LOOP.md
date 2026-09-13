@@ -216,6 +216,13 @@ the existing regular-file check. Read-only O_NOFOLLOW alone does not prevent
 FIFO opens from blocking. Preserve this regression when changing admission;
 it is not proof of general filesystem time bounds or OS isolation.
 
+[EXECUTOR-011.md](EXECUTOR-011.md) applies the same measured lesson to the shared
+bounded-file reader used by executor and runtime admission. A real FIFO blocks
+the published baseline before fstat and rejects on the corrected source. Every
+untrusted bounded regular-file admission path must retain O_NONBLOCK before its
+regular-file check. This closes the reproduced FIFO case only; it does not prove
+same-UID immutability, general filesystem time bounds or OS isolation.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family

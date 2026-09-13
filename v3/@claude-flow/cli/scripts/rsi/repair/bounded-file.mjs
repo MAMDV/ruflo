@@ -4,7 +4,7 @@ import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 
 export function readBoundRegularFile(path, maximumBytes, label = 'file') {
   assert(Number.isSafeInteger(maximumBytes) && maximumBytes > 0, 'positive read ceiling');
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = fstatSync(fd, { bigint: true });
     assert(before.isFile() && before.size > 0n && before.size <= BigInt(maximumBytes), `${label} regular bounded file`);
