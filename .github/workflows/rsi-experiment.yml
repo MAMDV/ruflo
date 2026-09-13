@@ -73,6 +73,8 @@ jobs:
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/runtime-layout.test.mjs
       - name: Content-addressed minimal runtime snapshot adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/runtime-snapshot.test.mjs
+      - name: Shared bounded-file admission adversarial tests
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/bounded-file.test.mjs
       - name: Descriptor-bound Bubblewrap launch adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fd-launch.test.mjs
       - name: Source-bound Bubblewrap engine artifact adversarial tests

@@ -46,3 +46,11 @@ the executor test-file load; all 27 executed runtime-layout/snapshot cases passe
 This retained local environment failure is not represented as a source failure.
 The complete GitHub checkout CI is required for final acceptance.
 
+FIRST COMPLETE-CHECKOUT CI
+RUN https://github.com/ruvnet/ruflo/actions/runs/34771590761
+EXIT 0
+262 existing tests passed and seven historical epochs replayed. Inspection of the
+workflow and logs showed the new bounded-file.test.mjs suite was not registered
+in the explicit CI file list. This run is retained as incomplete acceptance; it
+does not count as validating the new regression. The workflow is corrected for
+the reserved second run.

@@ -22,6 +22,11 @@ the required acceptance source. Raw results and measured costs are preserved in
 [repair-bounded-fifo.json](evidence/loop-development/repair-bounded-fifo.json)
 and its companion raw text file.
 
+The first complete-checkout CI run passed the 262 previously registered tests and
+seven replays, but log inspection found that its explicit list omitted this new
+suite. That incomplete acceptance is retained. The workflow now registers the
+shared-helper suite, and only the second run may accept this increment.
+
 Acceptance on Linux with Node 24:
 
     node --test v3/@claude-flow/cli/scripts/rsi/repair/bounded-file.test.mjs
@@ -34,4 +39,3 @@ Guidance now requires every untrusted bounded regular-file admission path to
 retain a nonblocking open before fstat. Hourly cadence is retained because useful
 bounded implementation remains available. Roll back only if complete-checkout CI
 shows changed regular-file bytes or a current consumer regression.
-

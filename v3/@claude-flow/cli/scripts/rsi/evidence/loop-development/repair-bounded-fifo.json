@@ -4,6 +4,7 @@
   "decision": "FIX_SHARED_RUNTIME_ADMISSION_FIFO_BLOCK",
   "recordedAt": "2026-09-13T17:24:19Z",
   "baselineSource": "24e47c6e887b47f666e72aaef3ec8c5b4d35e38c",
+  "implementationSource": "8a199f78a0d559a9cba8fcddce9b966e76a57b44",
   "reservationUrl": "https://github.com/ruvnet/core-memory/issues/85#issuecomment-5654847939",
   "runtime": "Node 24.19.0",
   "change": {
@@ -41,6 +42,13 @@
     "executedRuntimeLayoutAndSnapshotCasesPassed": 27,
     "fullCheckoutCiRequired": true
   },
+  "firstCompleteCheckoutCi": {
+    "runId": 34771590761,
+    "testsPassed": 262,
+    "replayedEpochs": 7,
+    "newSuiteRegistered": false,
+    "decision": "INCOMPLETE_ACCEPTANCE_RETAIN_AND_REGISTER_NEW_SUITE"
+  },
   "rawOutcomeFile": "repair-bounded-fifo.raw.txt",
   "costs": {
     "localTestCommands": 3,
@@ -65,7 +73,7 @@
     "proposedGuidance": "preserve nonblocking opens for every untrusted bounded regular-file admission path",
     "expectedBenefit": "prevent pre-fstat FIFO denial of service in shared runtime admission",
     "benefitMeasured": true,
-    "acceptance": "shared helper rejects an actual FIFO and every current consumer passes complete-checkout CI",
+    "acceptance": "shared helper rejects an actual FIFO and every current consumer passes complete-checkout CI with the new suite explicitly registered",
     "rollbackCondition": "revert if O_NONBLOCK changes admitted regular-file bytes or breaks a current consumer",
     "priorSchedule": "hourly",
     "proposedSchedule": "hourly",
@@ -87,4 +95,3 @@
     "boundedRsiEvidenceAccepted": false
   }
 }
-
