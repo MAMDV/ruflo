@@ -189,6 +189,26 @@ runner, a separately reviewed and pinned Bubblewrap 0.10.0-or-later executable,
 and successful mount/namespace/egress probe remain required before p-limit or any
 repair candidate execution.
 
+[EXECUTOR-008.md](EXECUTOR-008.md) rejects the previously selected Bubblewrap
+0.10.0 because the official GHSA-pxhw-h44j-8pfx advisory affects versions before
+0.12.0. It builds and preserves a quarantined v0.12.0 artifact from the exact
+official release source, records all observed duplicate acquisition work without
+refund, and adds a single-use acquisition guard. The artifact is not yet a trusted
+runtime: its build provenance, toolchain reproducibility and compatible-host
+isolation behavior remain unproved.
+
+[EXECUTOR-009.md](EXECUTOR-009.md) migrates the executor policy to schema v2 and
+binds it to that exact repository artifact, hash, size, ELF closure, upstream
+source identities and reviewed native fd semantics. The executor derives the
+artifact path from its own reviewed source root, validates the complete policy,
+requires exact `bubblewrap 0.12.0` output and rejects
+`--not-a-security-boundary`. Upstream source confirms `--ro-bind-fd` performs a
+post-mount device/inode identity check and `--ro-bind-data` copies from an
+inherited fd. That check does not prevent hostile same-UID in-place content
+mutation, so only the fixed capability probe can be attempted next, and only on
+a compatible exclusive-UID host. This source review does not authorize a probe,
+p-limit run, repair trial, merge or deployment.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family
