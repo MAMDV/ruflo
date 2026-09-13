@@ -8,15 +8,16 @@ time-of-check/time-of-use race. The production launcher now refuses to spawn
 unless reviewed native `--bind-fd` and `--ro-bind-fd` semantics are present.
 
 The official Bubblewrap v0.10.0 release adds `--[ro-]bind-fd` specifically to
-mount a filesystem represented by a descriptor without this race. The prepared
+mount a filesystem represented by a descriptor and detect the internal
+resolve-to-mount race by comparing descriptor and mounted identities. The prepared
 launch path uses those native options for runtime and output directories,
 executes the isolation engine through its inherited descriptor, and uses
 `--ro-bind-data` for the fixed probe. It is deliberately unreachable under the
 current 0.9.0 policy. No unreviewed executable is acquired and no privileged
 helper, compiler, permission or resource dimension is added. File hashing uses
 positional descriptor reads so the probe descriptor remains at offset zero.
-Every inherited descriptor is closed after a successful, rejected or interrupted
-launch callback. Native fd-bind operations also let Bubblewrap close the inherited
+Every inherited descriptor is closed by the parent after a successful, rejected
+or interrupted launch callback. Native fd-bind operations also let Bubblewrap close the inherited
 directory descriptors after mounting; the rejected 0.9.0 workaround would have
 leaked ordinary inherited descriptors into the sandbox command.
 
@@ -24,8 +25,10 @@ This is not complete same-UID isolation. Even after a reviewed engine upgrade, a
 still attempt in-place content mutation, ptrace, signal delivery or output-tree
 tampering. Snapshot cleanup detects a root substituted before cleanup begins but
 remains pathname-recursive and is not protected against a concurrent replacement.
-Runtime subtree bytes are not sealed memfds. Therefore the capability
-receipt remains incompatible, candidate execution remains disabled, and a
+Runtime subtree bytes are not sealed memfds. Production records an incompatible
+capability receipt after the pinned version observation, with
+`PINNED_ENGINE_LACKS_NATIVE_BIND_FD` and actual observed costs; it performs no
+namespace launch. Candidate execution remains disabled, and a
 compatible exclusive-UID runner is still required. The existing host's failed
 namespace evidence remains authoritative and must not be retried unchanged.
 
@@ -49,3 +52,8 @@ binds fail closed, stale root-path replacement is detected before cleanup, the p
 fixed probe path becomes descriptor data, all descriptors close on interruption,
 and execution/RSI gates remain false. A passing unit suite does not establish OS
 namespace compatibility.
+
+The current native-semantics field is hardcoded false for the exact 0.9.0 policy,
+not accepted from a production caller. A future migration must derive it from a
+reviewed source receipt bound to the replacement engine hash and version; toggling
+a boolean is not admission.

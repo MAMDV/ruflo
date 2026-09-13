@@ -32,6 +32,7 @@ function temporary(fn) {
 test('policy pins isolation, equal controls, original usage and zero authorization', () => {
   const result = validateExecutorPolicy(policy());
   assert.match(result.policyHash, /^[a-f0-9]{64}$/);
+  assert.equal(result.nativeBindFdSemanticsVerified, false);
   assert.equal(result.candidateExecutionEnabled, false);
 });
 test('policy changes cannot authorize execution or weaken any limit', () => {

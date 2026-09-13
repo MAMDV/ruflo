@@ -58,7 +58,11 @@ export function validateExecutorPolicy(policy) {
   assert.equal(policy.legacyMission.originalAnchor, 'c5c6da0b728c52414f2dff86f9d23121776d600defff0f214f1502a091f69088');
   assert.equal(policy.candidateExecutionEnabled, false);
   assert.equal(policy.boundedRsiEvidenceAccepted, false);
-  return { policyHash: EXPECTED_POLICY_HASH, candidateExecutionEnabled: false };
+  // This exact policy pins 0.9.0. Its parser has no native --[ro-]bind-fd,
+  // so production admission remains false until a reviewed policy migration
+  // binds a replacement engine identity and its source semantics together.
+  return { policyHash: EXPECTED_POLICY_HASH, nativeBindFdSemanticsVerified: false,
+    candidateExecutionEnabled: false };
 }
 
 function confinedDirectory(path, label) {
@@ -225,7 +229,7 @@ function supportedVersion(version) {
 function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
   assert(isAbsolute(receiptPath) && !existsSync(receiptPath), 'probe receipt must be a new absolute path');
   const policy = readJson(policyPath, 'executor policy');
-  validateExecutorPolicy(policy);
+  const policyCheck = validateExecutorPolicy(policy);
   const reservationPath = `${receiptPath}.reservation.json`;
   assert(!existsSync(reservationPath), 'existing reservation retained; explicit anchored recovery required');
   const reservation = { schema: 'ruflo.repair-isolation-engineering-reservation/v1',
@@ -272,10 +276,13 @@ function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
         validatePinnedExecutable(engineIdentity); engineUnchanged = true;
       } catch (error) { engineStageError = error.code ?? error.message; }
     }
-    const admitted = supportedVersion(version) && engineUnchanged;
+    const nativeBindFdAdmitted = injectedRuntimeLayout ? true : policyCheck.nativeBindFdSemanticsVerified;
+    const admitted = supportedVersion(version) && engineUnchanged && nativeBindFdAdmitted;
     let capability = { compatible: false, attempted: false,
-      blockers: [engineStageError ? 'ENGINE_IDENTITY_REJECTED' :
-        (engineUnchanged ? 'ENGINE_VERSION_UNSUPPORTED' : 'ENGINE_MISSING_OR_CHANGED')], candidateExecutionEnabled: false };
+      blockers: [engineStageError ? 'ENGINE_IDENTITY_REJECTED' : !engineUnchanged
+        ? 'ENGINE_MISSING_OR_CHANGED' : !supportedVersion(version)
+          ? 'ENGINE_VERSION_UNSUPPORTED' : 'PINNED_ENGINE_LACKS_NATIVE_BIND_FD'],
+      candidateExecutionEnabled: false };
     if (admitted) {
       const candidate = join(temp, 'candidate'), output = join(temp, 'output');
       mkdirSync(candidate); mkdirSync(output); writeFileSync(join(candidate, 'probe.mjs'), PROBE_SOURCE, { flag: 'wx', mode: 0o600 });
@@ -299,6 +306,7 @@ function recordProbe(receiptPath, policyPath, injectedRuntimeLayout) {
       engine: { sourcePath: policy.engine.binary, stagedPathUsed: engineIdentity !== null, sha256: engineHash,
         expectedSha256: policy.engine.sha256, expectedSizeBytes: policy.engine.sizeBytes,
         stageError: engineStageError, unchangedAfterVersion: engineUnchanged,
+        nativeBindFdSemanticsVerified: nativeBindFdAdmitted,
         versionAttempted, versionObservationComplete,
         versionStatus: version.status, versionSignal: version.signal ?? null, versionError: version.error?.code ?? null,
         versionStdout: version.stdout ?? '', versionStderr: version.stderr ?? '' },
