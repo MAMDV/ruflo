@@ -10,7 +10,9 @@ permissions:
   contents: read
 jobs:
   build:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.sha == 'd1394f0b7d4436210e10c5f2b35f25c9e5a1a889'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
