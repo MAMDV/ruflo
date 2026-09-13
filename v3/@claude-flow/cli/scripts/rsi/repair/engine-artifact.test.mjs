@@ -64,7 +64,7 @@ test('source, workflow action and legacy ledger substitutions fail closed', () =
 test('durable reservation binds every planned source byte before build', () => {
   const repositoryRoot = resolve(ROOT, '../../../../../..');
   const result = validateEngineBuildReservation(join(ROOT, 'engine-build-plan.json'),
-    join(ROOT, '../evidence/loop-development/repair-engine-artifact-v2.reservation.json'), repositoryRoot);
+    join(ROOT, '../evidence/loop-development/repair-engine-artifact-closure.reservation.json'), repositoryRoot);
   assert.match(result.reservationHash, /^[a-f0-9]{64}$/);
   assert.equal(result.reservation.candidateExecutionEnabled, false);
 });
