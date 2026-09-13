@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { gunzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectFreshTaskCapsules, validateCapsuleBytes } from './fresh-task-capsule.mjs';
+import { inspectFreshTaskCapsules, parseSourceTar, validateCapsuleBytes } from './fresh-task-capsule.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = resolve(ROOT, 'fresh-task-freeze.json');
@@ -17,6 +18,12 @@ const bytes = () => {
     evaluator: readFileSync(resolve(root, 'evaluator.mjs')),
     testPlan: readFileSync(resolve(root, 'test-plan.json')),
   };
+};
+const rawTar = () => gunzipSync(bytes().sourceArchive);
+const rewriteChecksum = (tar, offset) => {
+  tar.fill(32, offset + 148, offset + 156);
+  const sum = tar.subarray(offset, offset + 512).reduce((total, byte) => total + byte, 0);
+  tar.write(`${sum.toString(8).padStart(6, '0')}\0 `, offset + 148, 8, 'ascii');
 };
 
 test('the first real fresh development task has complete bound capsules', () => {
@@ -59,4 +66,25 @@ test('capsule inspection never enables execution or RSI acceptance', () => {
   const result = inspectFreshTaskCapsules(MANIFEST, ARTIFACTS);
   assert.equal(result.candidateExecutionEnabled, false);
   assert.equal(result.boundedRsiEvidenceAccepted, false);
+});
+
+test('tar paths cannot escape the future proposer workspace', () => {
+  const tar = rawTar(), licenseHeader = 1024;
+  tar.fill(0, licenseHeader, licenseHeader + 100);
+  tar.write('../LICENSE', licenseHeader, 'utf8');
+  rewriteChecksum(tar, licenseHeader);
+  assert.throws(() => parseSourceTar(tar), /unsafe tar path/);
+});
+
+test('links and other non-source tar entry types are rejected', () => {
+  const tar = rawTar(), licenseHeader = 1024;
+  tar[licenseHeader + 156] = '2'.charCodeAt(0);
+  rewriteChecksum(tar, licenseHeader);
+  assert.throws(() => parseSourceTar(tar), /tar entry type/);
+});
+
+test('PAX metadata binds the archive to the frozen base commit', () => {
+  const value = bytes();
+  assert.throws(() => parseSourceTar(rawTar(), '0'.repeat(40)), /source archive commit metadata/);
+  assert.equal(parseSourceTar(rawTar(), value.task.source.baseCommit).length, 5);
 });
