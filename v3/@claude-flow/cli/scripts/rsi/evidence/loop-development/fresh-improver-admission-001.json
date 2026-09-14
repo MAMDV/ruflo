@@ -59,7 +59,17 @@
     "passed": 37,
     "failed": 0,
     "reportedSuiteDurationMs": 333.310896,
-    "readOnlyInspectionCommands": 1
+    "readOnlyInspectionCommands": 1,
+    "githubActions": {
+      "runId": 34801502726,
+      "runUrl": "https://github.com/ruvnet/ruflo/actions/runs/34801502726",
+      "conclusion": "success",
+      "researchLoopTests": 301,
+      "experimentProofTests": 18,
+      "totalTests": 319,
+      "historicalEpochsReplayed": 7,
+      "boundedRsiEvidenceAccepted": false
+    }
   },
   "costs": {
     "repairCandidateEvaluations": 0,

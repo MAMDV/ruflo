@@ -70,3 +70,8 @@ node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-improver-admission.test
 
 Expected: nine passes, zero admitted proposal families for the current fresh task,
 zero candidate bytes, and execution/RSI gates closed.
+
+GitHub Actions run 34801502726 passed 301 focused research-loop tests plus 18
+experiment/proof tests (319 total). It replayed all seven epochs from their
+original source identities, retained 209784 lifetime native calls, and reported
+`boundedRsiEvidenceAccepted: false`.
