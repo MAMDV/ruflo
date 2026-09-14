@@ -300,12 +300,23 @@ export const agentdbPatternSearch: MCPTool = {
         // Tier 1 — semantic
         let results: Array<Record<string, unknown>> = [];
         let tier: 'semantic' | 'substring' = 'semantic';
+        // #3325: a thrown error and a genuine zero-match were indistinguishable
+        // — `catch {}` discarded the former, `semantic?.results ?? []` treated
+        // `{success: false, error}` (which searchEntries returns WITHOUT
+        // throwing) as the latter. Capture whichever fires so a caller that
+        // lands on tier=substring can tell why, instead of source-reading.
+        let semanticError: string | undefined;
         try {
           const semantic = await searchEntries({ query, namespace: 'pattern', limit: topK });
+          if (semantic && semantic.success === false) {
+            semanticError = semantic.error ?? 'searchEntries returned success:false';
+          }
           results = (semantic?.results ?? [])
             .map(parseEntry)
             .filter((r): r is Record<string, unknown> => r !== null);
-        } catch { /* fall through to tier 2 */ }
+        } catch (err) {
+          semanticError = sanitizeError(err);
+        }
 
         // Tier 2 — substring scan (catches just-written entries before HNSW indexes them).
         // #2226: listEntries returns metadata only (no content/value — see open #2014),
@@ -351,6 +362,11 @@ export const agentdbPatternSearch: MCPTool = {
           reason: result ? `reasoningBank-empty:${result.controller ?? 'unknown'}` : 'reasoningBank-unavailable:registry-null',
           controller: 'memory-store-fallback',
           tier,
+          // #3325: when tier=substring because tier 1 hit a real error (thrown,
+          // or {success:false, error}) rather than a genuine zero-match,
+          // surface why — otherwise a hard failure and an honest "not found"
+          // are indistinguishable from the response alone.
+          ...(tier === 'substring' && semanticError ? { semanticError } : {}),
           note: result
             ? `ReasoningBank returned 0 results; tier=${tier} from pattern namespace.`
             : `ReasoningBank controller unavailable; tier=${tier} from pattern namespace.`,

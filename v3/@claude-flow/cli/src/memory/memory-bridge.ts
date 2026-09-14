@@ -2132,7 +2132,12 @@ export async function bridgeStorePattern(options: {
       } catch { /* HNSW is best-effort */ }
     }
 
-    return { success: true, patternId: result.id, controller: 'bridge-fallback' };
+    // #3324: bridgeStoreEntry's `result.id` is its OWN internally generated
+    // row id (generateId('entry')), a different value from the `key` the row
+    // was actually stored under. getEntry/memory_retrieve look up by `key`,
+    // so returning result.id here handed the caller a handle that can never
+    // be read back — return `patternId` (the real key) instead.
+    return { success: true, patternId, controller: 'bridge-fallback' };
   } catch {
     return null;
   }

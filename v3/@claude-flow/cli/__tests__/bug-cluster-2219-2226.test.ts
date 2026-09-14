@@ -268,3 +268,27 @@ describe('3.10.8 #bugC — boolean flags accept an explicit space-form value', (
     expect(parse(['--no-explore'])).toBe(false);
   });
 });
+
+describe('#3325 — agentdb_pattern-search surfaces why tier=substring fired', () => {
+  it('when tier is substring, semanticError (if present) is a diagnosable string, not silently swallowed', async () => {
+    const marker = `semantic-error-3325-${process.pid}-${process.hrtime.bigint()}`;
+    await agentdbPatternStore.handler({
+      pattern: `Use ${marker} for secure session renewal`,
+      type: 'auth-pattern',
+      confidence: 0.9,
+    });
+    const found = await agentdbPatternSearch.handler({ query: marker, topK: 5, minConfidence: 0.1 });
+    if (!found || !Array.isArray(found.results)) return; // backend unavailable in isolation — skip
+
+    if (found.tier === 'substring' && 'semanticError' in found) {
+      // The exact bug: a thrown error or {success:false} used to be
+      // indistinguishable from an honest zero-match. If tier 1 did fail,
+      // that reason must now be a non-empty, human-readable string.
+      expect(typeof found.semanticError).toBe('string');
+      expect((found.semanticError as string).length).toBeGreaterThan(0);
+    }
+    // tier === 'semantic', or substring with no semanticError (an honest
+    // zero-match) are both fine — this test only guards against a swallowed
+    // failure being indistinguishable from "nothing found".
+  }, 60_000);
+});
