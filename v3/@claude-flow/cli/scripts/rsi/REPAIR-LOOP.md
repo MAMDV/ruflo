@@ -289,6 +289,16 @@ a reviewed task-general proposer or an independently frozen compatible training
 lineage passes this exact source-binding gate. This check does not read a fresh
 outcome, run a child, authorize resources or establish RSI.
 
+[TASK-GENERAL-PROPOSER-ADMISSION-001.md](TASK-GENERAL-PROPOSER-ADMISSION-001.md)
+adds a source-derived operator registry for the first frozen fresh task without
+overwriting the p-limit-specific negative. Derive generic operator availability
+only from the frozen public task prompt and proposer-visible source; keep evaluator
+inputs and fresh outcomes parent-only. Report the entire availability gain as a
+Codex-written proposer effect: the inherited p-limit state contributes zero to
+admission or selection. Every arm must receive equal mechanics, and candidate
+descriptor creation, patch materialization and execution remain closed until a
+reviewed hypothesis, compatible isolation and the separate resource approval.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family
