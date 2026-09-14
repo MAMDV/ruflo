@@ -86,7 +86,21 @@ jobs:
         # (Complements, not duplicates, the codex package-lock.json fix
         # above it in history — that made npm ci link the package for
         # codex at all; this makes the linked package actually runnable.)
-        run: npm run build --workspace=@claude-flow/security
+        #
+        # @claude-flow/mcp joined the root workspace array to fix an
+        # unrelated ETARGET install failure (the registry never had the
+        # exact pinned prerelease); same gap applies — linked but unbuilt,
+        # so v3/@claude-flow/cli/__tests__/mcp-policy-enforcer.test.ts's
+        # dynamic `import("@claude-flow/mcp")` failed to resolve until built.
+        #
+        # @claude-flow/cli-core: same gap again —
+        # __tests__/doctor-native-binding-2968.test.ts imports
+        # src/output.ts, which re-exports from
+        # '@claude-flow/cli-core/output', unresolvable until built.
+        run: |
+          npm run build --workspace=@claude-flow/security
+          npm run build --workspace=@claude-flow/mcp
+          npm run build --workspace=@claude-flow/cli-core
 
       - name: Run all tests
         # #3030: the historical suite has known debt, but new failing files
