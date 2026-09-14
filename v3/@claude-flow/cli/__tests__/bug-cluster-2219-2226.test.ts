@@ -168,6 +168,49 @@ describe('#2226 — pattern store and search share a backend', () => {
   }, 60_000);
 });
 
+describe('#3288 — pattern store/search surface degraded:true on the memory-store-fallback path', () => {
+  it('agentdb_pattern-store sets degraded:true when it falls back (never on the healthy path)', async () => {
+    const marker = `degraded-flag-store-${process.pid}-${process.hrtime.bigint()}`;
+    const stored = await agentdbPatternStore.handler({
+      pattern: `Use ${marker} for secure session renewal`,
+      type: 'auth-pattern',
+      confidence: 0.9,
+    });
+    if (!stored || stored.success !== true) return; // both bridge and fallback unavailable — skip
+
+    if (stored.controller === 'memory-store-fallback') {
+      // The whole point of #3288: a caller must be able to detect degradation
+      // from response SHAPE, not by parsing a free-text `note` string.
+      expect(stored.degraded).toBe(true);
+    } else {
+      // Healthy ReasoningBank path — must NOT claim to be degraded.
+      expect(stored.degraded).toBeUndefined();
+    }
+  }, 60_000);
+
+  it('agentdb_pattern-search sets degraded:true when it falls back (never on the healthy path)', async () => {
+    const marker = `degraded-flag-search-${process.pid}-${process.hrtime.bigint()}`;
+    await agentdbPatternStore.handler({
+      pattern: `Use ${marker} for secure session renewal`,
+      type: 'auth-pattern',
+      confidence: 0.9,
+    });
+
+    const found = await agentdbPatternSearch.handler({
+      query: marker,
+      topK: 5,
+      minConfidence: 0.1,
+    });
+    if (!found || !Array.isArray(found.results)) return; // backend unavailable in isolation — skip
+
+    if (found.controller === 'memory-store-fallback') {
+      expect(found.degraded).toBe(true);
+    } else {
+      expect(found.degraded).toBeUndefined();
+    }
+  }, 60_000);
+});
+
 /**
  * 3.10.8 routing-learning fixes (follow-ups to the intelligence audit):
  *   Bug B — Q-router cached a stale route decision and only invalidated the

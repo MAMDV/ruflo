@@ -186,6 +186,11 @@ export const agentdbPatternStore: MCPTool = {
         });
         return {
           success: true,
+          // #3288: a caller must not have to already know to distrust a
+          // "successful" response — degraded:true is the structural signal
+          // (matching agentbbs-tools.ts's degradedResult() convention),
+          // `note` stays for the human-readable detail.
+          degraded: true,
           patternId,
           controller: 'memory-store-fallback',
           note: 'ReasoningBank controller registry unavailable. Pattern persisted via memory_store. Run `agentdb_health` to inspect controller registration.',
@@ -310,8 +315,12 @@ export const agentdbPatternSearch: MCPTool = {
         // round-trip sees both ends agree. The store reports
         // `memory-store-fallback`; we use the same name + a `tier` field
         // to expose which sub-strategy fired.
+        // #3288: degraded:true is the structural signal a caller can check
+        // without already knowing to distrust an apparently-successful
+        // response — matches agentbbs-tools.ts's degradedResult() convention.
         return {
           results,
+          degraded: true,
           controller: 'memory-store-fallback',
           tier,
           note: result
