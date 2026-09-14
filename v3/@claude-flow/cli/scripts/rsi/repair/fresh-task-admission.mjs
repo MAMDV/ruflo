@@ -63,7 +63,7 @@ function validateExclusions(exclusions) {
 }
 
 function validateTask(task, forbidden) {
-  exactKeys(task, ['id', 'repository', 'cluster', 'license', 'source', 'evaluator', 'provenance'], 'fresh task fields');
+  exactKeys(task, ['id', 'repository', 'cluster', 'license', 'source', 'prompt', 'evaluator', 'provenance'], 'fresh task fields');
   assert(safeId.test(task.id) && safeRepo.test(task.repository) && safeId.test(task.cluster), 'fresh task identity');
   assert(!forbidden.taskIds.has(task.id), 'exposed or consumed task cannot be fresh');
   assert(['MIT', 'BSD-3-Clause', 'Apache-2.0'].includes(task.license), 'reviewed permissive license required');
@@ -73,6 +73,14 @@ function validateTask(task, forbidden) {
   assert(!forbidden.commits.has(task.source.baseCommit) && !forbidden.commits.has(task.source.baseTree), 'exposed source revision cannot be fresh');
   assert(Number.isSafeInteger(task.source.archiveBytes) && task.source.archiveBytes > 0, 'fresh source archive size');
   assert(task.source.sourceUrl === `https://github.com/${task.repository}/tree/${task.source.baseCommit}`, 'fresh source URL');
+
+  exactKeys(task.prompt, ['capsuleSha256', 'capsuleBytes', 'sourceUrl', 'issueNumber', 'visibility', 'capturedBeforeProposal'], 'fresh prompt fields');
+  assert(digest64.test(task.prompt.capsuleSha256) && Number.isSafeInteger(task.prompt.capsuleBytes) &&
+    task.prompt.capsuleBytes > 0 && task.prompt.capsuleBytes <= 65536, 'fresh prompt capsule');
+  assert(Number.isSafeInteger(task.prompt.issueNumber) && task.prompt.issueNumber > 0, 'fresh prompt issue number');
+  assert(task.prompt.sourceUrl === `https://github.com/${task.repository}/issues/${task.prompt.issueNumber}`, 'fresh prompt URL');
+  assert(task.prompt.visibility === 'PROPOSER_VISIBLE_PUBLIC_TASK_INPUT' &&
+    task.prompt.capturedBeforeProposal === true, 'fresh prompt boundary');
 
   exactKeys(task.evaluator, ['capsuleSha256', 'capsuleBytes', 'testPlanSha256', 'visibility', 'authoredBeforeProposal'], 'fresh evaluator fields');
   assert(digest64.test(task.evaluator.capsuleSha256) && digest64.test(task.evaluator.testPlanSha256), 'fresh evaluator identity');

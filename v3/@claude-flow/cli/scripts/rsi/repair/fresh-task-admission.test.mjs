@@ -11,6 +11,7 @@ const mutate = edit => { const value = original(); edit(value); return value; };
 const synthetic = () => ({
   id: 'synthetic-fresh-task', repository: 'example/fresh-repo', cluster: 'fresh-cluster', license: 'MIT',
   source: { baseCommit: '1'.repeat(40), baseTree: '2'.repeat(40), archiveSha256: '3'.repeat(64), archiveBytes: 128, sourceUrl: `https://github.com/example/fresh-repo/tree/${'1'.repeat(40)}` },
+  prompt: { capsuleSha256: '7'.repeat(64), capsuleBytes: 256, sourceUrl: 'https://github.com/example/fresh-repo/issues/123', issueNumber: 123, visibility: 'PROPOSER_VISIBLE_PUBLIC_TASK_INPUT', capturedBeforeProposal: true },
   evaluator: { capsuleSha256: '4'.repeat(64), capsuleBytes: 64, testPlanSha256: '5'.repeat(64), visibility: 'PARENT_ONLY_UNREAD_BY_PROPOSER', authoredBeforeProposal: true },
   provenance: { sourceKind: 'PUBLIC_GITHUB_PRE_OUTCOME', selectedAt: '2026-09-13T19:00:00.000Z', selectedBeforeProposal: true, fixDataAcquired: false, outcomeRead: false, selectionQuerySha256: '6'.repeat(64) },
 });

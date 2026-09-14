@@ -6,6 +6,7 @@ import { dirname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateFreshTaskFreeze } from './fresh-task-admission.mjs';
 import { parseSourceArchive, validateCapsuleBytes } from './fresh-task-capsule.mjs';
+import { validatePromptBytes } from './fresh-task-prompt.mjs';
 
 const assert = (condition, reason) => { if (!condition) throw Error(reason); };
 const inside = (root, path) => path.startsWith(`${root}${sep}`);
@@ -30,10 +31,12 @@ function loadTask(manifestPath, artifactRoot, taskId) {
   const root = resolve(artifactBase, task.id);
   assert(inside(artifactBase, root), 'artifact path escaped root');
   const sourceArchive = readFileSync(resolve(root, 'source.tar.gz'));
+  const taskPrompt = readFileSync(resolve(root, 'task-spec.json'));
   const evaluator = readFileSync(resolve(root, 'evaluator.mjs'));
   const testPlan = readFileSync(resolve(root, 'test-plan.json'));
   const inspection = validateCapsuleBytes(task, { sourceArchive, evaluator, testPlan });
-  return { admission, task, root, sourceArchive, evaluator, testPlan, inspection };
+  const prompt = validatePromptBytes(task, taskPrompt);
+  return { admission, task, root, sourceArchive, taskPrompt, prompt, evaluator, testPlan, inspection };
 }
 
 export function prepareFreshTask({ manifestPath, artifactRoot, destinationRoot, taskId }) {
@@ -69,6 +72,13 @@ export function prepareFreshTask({ manifestPath, artifactRoot, destinationRoot, 
       baseTree: loaded.task.source.baseTree,
       freezeHash: loaded.admission.freezeHash,
       sourceArchiveSha256: loaded.task.source.archiveSha256,
+      taskInput: {
+        schema: loaded.prompt.schema,
+        issueUrl: loaded.prompt.issueUrl,
+        title: loaded.prompt.title,
+        body: loaded.prompt.body,
+        capsuleSha256: loaded.task.prompt.capsuleSha256,
+      },
       workspaceRoot,
       files,
       candidateExecutionEnabled: false,

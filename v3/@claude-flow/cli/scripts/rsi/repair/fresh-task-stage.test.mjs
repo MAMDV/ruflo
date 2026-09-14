@@ -56,6 +56,16 @@ test('proposer receipt contains no parent evaluator identities or paths', t => {
   assert.ok(!proposer.includes(resolve(ARTIFACTS, TASK)));
 });
 
+test('proposer receipt includes the exact public task statement', t => {
+  const value = staged(); t.after(() => cleanup(value));
+  const prompt = JSON.parse(readFileSync(resolve(ARTIFACTS, TASK, 'task-spec.json')));
+  assert.equal(value.result.proposer.taskInput.issueUrl, prompt.issueUrl);
+  assert.equal(value.result.proposer.taskInput.title, prompt.title);
+  assert.equal(value.result.proposer.taskInput.body, prompt.body);
+  assert.match(value.result.proposer.taskInput.capsuleSha256, /^[a-f0-9]{64}$/);
+  assert.ok(!files(value.destinationRoot).includes('task-spec.json'));
+});
+
 test('parent binding keeps both evaluator artifacts inaccessible to proposer', t => {
   const value = staged(); t.after(() => cleanup(value));
   assert.equal(value.result.parent.proposerAccess, false);

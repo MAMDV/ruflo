@@ -266,6 +266,18 @@ not OS isolation: the compatible exclusive-UID sandbox, resource approval and a
 separate child launch remain mandatory. Roll back the staged task if any parent
 evaluator identity reaches the proposer surface or workspace.
 
+[FRESH-PROMPT-001.md](FRESH-PROMPT-001.md) closes the next child-autonomy gap:
+source bytes alone do not tell a child what change to attempt. Freeze the exact
+public issue statement as a bounded proposer-visible capsule before proposal,
+bind its repository, issue URL, state, timestamps, zero-comment observation and
+base revision, and validate it before building the child surface. The task prompt
+may cross the proposer boundary; evaluator and test-plan identities may not.
+Reject altered or unbounded prompt bytes, closed/commented task observations,
+unknown fields and fix/outcome provenance. A public issue can expose strong hints,
+so this is development input rather than sealed confirmation data. It gives a
+future child a task without researcher follow-up; it does not execute that child,
+prove isolation, authorize resources or measure descendant improvement.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family

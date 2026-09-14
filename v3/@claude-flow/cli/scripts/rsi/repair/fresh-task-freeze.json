@@ -73,6 +73,14 @@
         "archiveBytes": 88498,
         "sourceUrl": "https://github.com/conorbronsdon/avoid-ai-writing/tree/fabd62d9c8785dd0edda35201359bcc635b7d3de"
       },
+      "prompt": {
+        "capsuleSha256": "91495813669034503c7db9bf723b0b7c2ef30b8561e5f3880f4560609d0ee7dc",
+        "capsuleBytes": 2448,
+        "sourceUrl": "https://github.com/conorbronsdon/avoid-ai-writing/issues/291",
+        "issueNumber": 291,
+        "visibility": "PROPOSER_VISIBLE_PUBLIC_TASK_INPUT",
+        "capturedBeforeProposal": true
+      },
       "evaluator": {
         "capsuleSha256": "3ae79a9217ece75129679e6de77df525fa2797b695d874daa960a5cc9769c19f",
         "capsuleBytes": 1575,
