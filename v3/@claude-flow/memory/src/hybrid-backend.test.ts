@@ -242,6 +242,13 @@ describe('HybridBackend - ADR-009', () => {
     // and then never consumed it (combineUnion was a plain dedup, no score
     // math) — this suite proves `weights` now actually controls ordering.
     const QUERY_CONTENT = 'authentication token verification';
+    // Populated in beforeEach — generateMemoryId() is `mem_<ms-timestamp>_
+    // <random>`, so these two ids' relative order is NOT fixed run-to-run
+    // (same millisecond is common; the random suffix then decides it). The
+    // tie-break test below computes its expectation from these actual ids
+    // rather than assuming id-order matches key-order.
+    let semFavId = '';
+    let structFavId = '';
 
     beforeEach(async () => {
       // Explicit, distinct `createdAt` values (rather than relying on wall-clock
@@ -260,6 +267,7 @@ describe('HybridBackend - ADR-009', () => {
       });
       semFav.createdAt = 1000;
       await backend.store(semFav);
+      semFavId = semFav.id;
 
       // Content deliberately shares nothing with QUERY_CONTENT → ranks
       // AFTER 'fusion-sem-fav' in semantic results.
@@ -270,6 +278,7 @@ describe('HybridBackend - ADR-009', () => {
       });
       structFav.createdAt = 2000; // strictly newer → ranks FIRST under created_at DESC
       await backend.store(structFav);
+      structFavId = structFav.id;
     });
 
     async function fusedTopKey(weights: { semantic: number; structured: number }) {
@@ -350,9 +359,23 @@ describe('HybridBackend - ADR-009', () => {
         combineStrategy: 'union',
         weights: { semantic: 0, structured: 0 },
       });
-      expect(results.map((r) => r.key)).toEqual(
-        ['fusion-sem-fav', 'fusion-struct-fav'].sort((a, b) => a.localeCompare(b))
-      );
+      // Review: the tie-break is `entry.id.localeCompare`, not `entry.key`
+      // — generateMemoryId() is `mem_<ms-timestamp>_<random>`, so id-order
+      // has no fixed relationship to key-order (the two entries are often
+      // created in the same millisecond; the random suffix then decides
+      // it). Asserting a hardcoded key-alphabetical order here made this
+      // test flake on whichever id happened to sort backwards from its
+      // key. Compute the expectation from the actual ids captured in
+      // beforeEach instead, so the assertion matches what the code's
+      // documented contract (id order) actually guarantees.
+      const idToKey: Record<string, string> = {
+        [semFavId]: 'fusion-sem-fav',
+        [structFavId]: 'fusion-struct-fav',
+      };
+      const expectedKeys = [semFavId, structFavId]
+        .sort((a, b) => a.localeCompare(b))
+        .map((id) => idToKey[id]);
+      expect(results.map((r) => r.key)).toEqual(expectedKeys);
     });
   });
 
