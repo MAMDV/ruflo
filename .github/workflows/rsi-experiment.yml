@@ -62,6 +62,8 @@ jobs:
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-task-prompt.test.mjs
       - name: Source-only fresh-task proposer staging tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-task-stage.test.mjs
+      - name: Fresh-task inherited improver admission tests
+        run: node --test v3/@claude-flow/cli/scripts/rsi/repair/fresh-improver-admission.test.mjs
       - name: Content-addressed public source capsule adversarial tests
         run: node --test v3/@claude-flow/cli/scripts/rsi/repair/public-capsules.test.mjs
       - name: Complete public Git tree inventory adversarial tests

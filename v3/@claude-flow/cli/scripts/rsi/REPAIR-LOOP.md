@@ -278,6 +278,17 @@ so this is development input rather than sealed confirmation data. It gives a
 future child a task without researcher follow-up; it does not execute that child,
 prove isolation, authorize resources or measure descendant improvement.
 
+[FRESH-IMPROVER-ADMISSION-001.md](FRESH-IMPROVER-ADMISSION-001.md) preserves a
+useful negative before trial authorization: the current inherited and control
+materializer is exactly bound to the exposed p-limit task, base revision and
+`index.js`, while the frozen fresh task is a different repository, revision and
+regex-line-boundary cluster. All five arms therefore have zero admitted proposal
+families for the fresh task. Do not generate placeholder candidates or reinterpret
+training-only templates as cross-task improvement. Admit a future trial only after
+a reviewed task-general proposer or an independently frozen compatible training
+lineage passes this exact source-binding gate. This check does not read a fresh
+outcome, run a child, authorize resources or establish RSI.
+
 [IMPROVER-001.md](IMPROVER-001.md) implements an engineering-only inherited
 ranking scaffold while the compatible isolation runner is unavailable. Five
 nominal arms use one deterministic mechanism to derive diagnosis, patch-family
