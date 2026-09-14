@@ -168,8 +168,17 @@ describe('#2226 — pattern store and search share a backend', () => {
   }, 60_000);
 });
 
-describe('#3288 — pattern store/search surface degraded:true on the memory-store-fallback path', () => {
-  it('agentdb_pattern-store sets degraded:true when it falls back (never on the healthy path)', async () => {
+describe('#3288 — pattern store/search surface degraded:true on every non-reasoningBank path', () => {
+  // `controller: 'reasoningBank'` is the ONLY label that means the healthy
+  // path ran. Every other label (`bridge-fallback`, `memory-store-fallback`,
+  // and any future addition) is a degraded response — assert the invariant
+  // by controller identity, not by enumerating specific fallback labels, so
+  // a new label can't silently reopen this gap the way `bridge-fallback` did
+  // (bridgeStorePattern/bridgeSearchPatterns return it non-null, which used
+  // to skip the fallback blocks entirely and return undegraded).
+  const HEALTHY_CONTROLLER = 'reasoningBank';
+
+  it('agentdb_pattern-store sets degraded:true on every path except controller=reasoningBank', async () => {
     const marker = `degraded-flag-store-${process.pid}-${process.hrtime.bigint()}`;
     const stored = await agentdbPatternStore.handler({
       pattern: `Use ${marker} for secure session renewal`,
@@ -178,17 +187,19 @@ describe('#3288 — pattern store/search surface degraded:true on the memory-sto
     });
     if (!stored || stored.success !== true) return; // both bridge and fallback unavailable — skip
 
-    if (stored.controller === 'memory-store-fallback') {
-      // The whole point of #3288: a caller must be able to detect degradation
-      // from response SHAPE, not by parsing a free-text `note` string.
-      expect(stored.degraded).toBe(true);
-    } else {
-      // Healthy ReasoningBank path — must NOT claim to be degraded.
+    if (stored.controller === HEALTHY_CONTROLLER) {
       expect(stored.degraded).toBeUndefined();
+    } else {
+      // The whole point of #3288: a caller must be able to detect degradation
+      // from response SHAPE, not by parsing a free-text `note` string —
+      // covers bridge-fallback (registry present, reasoningBank unusable)
+      // and memory-store-fallback (registry entirely absent) alike.
+      expect(stored.degraded).toBe(true);
+      expect(typeof stored.reason).toBe('string');
     }
   }, 60_000);
 
-  it('agentdb_pattern-search sets degraded:true when it falls back (never on the healthy path)', async () => {
+  it('agentdb_pattern-search sets degraded:true on every path except controller=reasoningBank', async () => {
     const marker = `degraded-flag-search-${process.pid}-${process.hrtime.bigint()}`;
     await agentdbPatternStore.handler({
       pattern: `Use ${marker} for secure session renewal`,
@@ -203,10 +214,11 @@ describe('#3288 — pattern store/search surface degraded:true on the memory-sto
     });
     if (!found || !Array.isArray(found.results)) return; // backend unavailable in isolation — skip
 
-    if (found.controller === 'memory-store-fallback') {
-      expect(found.degraded).toBe(true);
-    } else {
+    if (found.controller === HEALTHY_CONTROLLER) {
       expect(found.degraded).toBeUndefined();
+    } else {
+      expect(found.degraded).toBe(true);
+      expect(typeof found.reason).toBe('string');
     }
   }, 60_000);
 });
