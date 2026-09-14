@@ -172,6 +172,16 @@ const KNOWN_ESCAPE_HATCHES = new Set([
   // this label as issuer proof.
   'CLAUDE_FLOW_PRINCIPAL_ID',
 
+  // ── ADR-377 Phase 3: per-worker Ed25519 caller-identity credential ─────────
+  // DualModeOrchestrator mints these into a spawned worker's OWN environment
+  // (workerEnvironment()) — a credential pair for authorizeMcpTool's
+  // resolveMcpCallerIdentity() to verify, not a value any caller should be
+  // able to select via a CLI flag (that would let a process simply assert a
+  // signature instead of proving one). Same no-CLI-surface reasoning as
+  // CLAUDE_FLOW_PRINCIPAL_ID above.
+  'CLAUDE_FLOW_MCP_CALLER_PUBKEY',
+  'CLAUDE_FLOW_MCP_INVOCATION_TOKEN',
+
   // ── OS / runtime standard env ────────────────────────────────────────────────
   'HOME',
   'USERPROFILE',
