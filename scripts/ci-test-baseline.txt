@@ -75,7 +75,6 @@ v3/@claude-flow/cli/__tests__/neural-router.test.ts
 v3/@claude-flow/cli/__tests__/output.test.ts
 v3/@claude-flow/cli/__tests__/planflip-mempoison-2752.test.ts
 v3/@claude-flow/cli/__tests__/plugins-transfer-deep.test.ts
-v3/@claude-flow/cli/__tests__/policy-runtime.test.ts
 v3/@claude-flow/cli/__tests__/pq-validation.test.ts
 v3/@claude-flow/cli/__tests__/proxy-extract-archive.test.ts
 v3/@claude-flow/cli/__tests__/security-scan-enum-validation.test.ts
