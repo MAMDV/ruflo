@@ -57,3 +57,28 @@ describe('authority envelope boundary', () => {
     expect(intersectEnvelopes(undefined)).toBeUndefined();
   });
 });
+
+describe('authority algebra and usage bounds', () => {
+  it('intersection is commutative and never grants beyond either input', () => {
+    const scopes = [undefined, [], ['*'], ['memory_*'], ['memory_get'], ['shell'], ['memory_g*','status']];
+    for (const toolsA of scopes) for (const toolsB of scopes) {
+      const a = {tools:toolsA}, b = {tools:toolsB};
+      const ab = intersectEnvelopes(a,b), ba = intersectEnvelopes(b,a);
+      for (const tool of ['memory_get','memory_store','shell','status','memory_g','other']) {
+        const action = {type:'read',tool};
+        const expected = checkCapabilityEnvelope(action,a).allowed && checkCapabilityEnvelope(action,b).allowed;
+        expect(checkCapabilityEnvelope(action,ab).allowed).toBe(expected);
+        expect(checkCapabilityEnvelope(action,ba).allowed).toBe(expected);
+      }
+    }
+  });
+  it('requires known finite nonnegative usage under a cap', () => {
+    for (const [field,cap] of [['costUsd','maxCostUsd'],['tokens','maxTokens'],['concurrency','maxConcurrency']]) {
+      for (const value of [undefined,NaN,Infinity,-1,11]) {
+        expect(checkCapabilityEnvelope({type:'run',[field]:value},{[cap]:10}).allowed).toBe(false);
+      }
+      expect(checkCapabilityEnvelope({type:'run',[field]:10},{[cap]:10}).allowed).toBe(true);
+    }
+    expect(checkCapabilityEnvelope({type:'run'},{expiresAt:1},NaN).allowed).toBe(false);
+  });
+});

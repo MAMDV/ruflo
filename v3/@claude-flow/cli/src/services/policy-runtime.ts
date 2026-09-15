@@ -418,23 +418,30 @@ export async function authorizeMcpTool(
   }
   // A tool ceiling must never replace the authority inherited by a worker.
   // Intersection also validates both envelopes before policy or tool execution.
-  const envelope = processEnvelope && attributes.envelope
-    ? intersectEnvelopes(processEnvelope, attributes.envelope)
-    : processEnvelope ?? attributes.envelope;
+  const envelope = intersectEnvelopes(processEnvelope, attributes.envelope);
+  // Only explicitly reviewed handlers may operate with namespace-restricted
+  // authority. Several inventory/import tools ignore input.namespace entirely.
+  if (envelope && /^(memory|agentdb)_/.test(toolName)
+    && [envelope.readNamespaces, envelope.writeNamespaces].some(scopes =>
+      scopes !== undefined && !scopes.includes('*'))
+    && !['memory_store', 'memory_retrieve', 'memory_search', 'memory_delete', 'memory_list'].includes(toolName)) {
+    throw new Error('global-memory-operation-outside-envelope');
+  }
   // Omitted namespaces can mean a handler default OR a query over all namespaces.
   // Never guess that target when delegated namespace authority is restricted.
-  if (attributes.namespaceAccess && envelope) {
-    const namespaces = attributes.namespaceAccess === 'read'
+  const namespaceAccess = classifyMcpTool(toolName).namespaceAccess ?? attributes.namespaceAccess;
+  if (namespaceAccess && envelope) {
+    const namespaces = namespaceAccess === 'read'
       ? envelope.readNamespaces : envelope.writeNamespaces;
     if (namespaces !== undefined && !namespaces.includes('*')
-      && (typeof input.namespace !== 'string' || input.namespace.length === 0)) {
+      && (typeof input.namespace !== 'string' || input.namespace.length === 0 || input.namespace === 'all')) {
       throw new Error('namespace-required-by-capability-envelope');
     }
   }
   return evaluatePolicyRequest({
     identity: resolveMcpCallerIdentity(),
     action: {
-      type: attributes.actionType ?? 'mcp.tool.call',
+      type: attributes.actionType ?? classifyMcpTool(toolName).actionType,
       resource: toolName,
       tool: toolName,
       server: typeof context.serverId === 'string' ? context.serverId : 'ruflo',
@@ -487,4 +494,19 @@ export function classifyMcpTool(toolName: string): {
     destructive,
     namespaceAccess: memoryRead ? 'read' : memoryWrite ? 'write' : undefined,
   };
+}
+
+/** Keep authorization and execution bound to the same detached MCP arguments. */
+export async function invokeAuthorizedMcpTool<T>(
+  toolName: string,
+  input: Record<string, unknown>,
+  context: Record<string, unknown>,
+  handler: (input: Record<string, unknown>, context: Record<string, unknown>) => Promise<T>,
+): Promise<T> {
+  const args = structuredClone(input);
+  const decision = await authorizeMcpTool(toolName, args, context, classifyMcpTool(toolName));
+  if (decision.enforcedOutcome !== 'allowed') {
+    throw new Error(`policy-${decision.enforcedOutcome}:${decision.reason}; receipt=${decision.receiptId}`);
+  }
+  return handler(args, context);
 }

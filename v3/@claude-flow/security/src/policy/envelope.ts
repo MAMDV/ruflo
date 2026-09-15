@@ -30,6 +30,7 @@ export function checkCapabilityEnvelope(
   try { validateCapabilityEnvelope(envelope); } catch {
     return { allowed: false, reason: 'invalid-capability-envelope' };
   }
+  if (!Number.isFinite(now)) return { allowed: false, reason: 'invalid-authority-clock' };
   if (envelope.expiresAt !== undefined && envelope.expiresAt <= now) {
     return { allowed: false, reason: 'capability-envelope-expired' };
   }
@@ -41,19 +42,20 @@ export function checkCapabilityEnvelope(
     [matches(envelope.environments, action.environment), 'environment-outside-envelope'],
   ];
   if (action.namespace) {
-    const namespaces = action.type.includes('read')
+    const namespaces = (action.type === 'read' || action.type.endsWith('.read'))
       ? envelope.readNamespaces
       : envelope.writeNamespaces;
     checks.push([matches(namespaces, action.namespace), 'namespace-outside-envelope']);
   }
-  if (action.costUsd !== undefined && envelope.maxCostUsd !== undefined) {
-    checks.push([action.costUsd <= envelope.maxCostUsd, 'cost-outside-envelope']);
-  }
-  if (action.tokens !== undefined && envelope.maxTokens !== undefined) {
-    checks.push([action.tokens <= envelope.maxTokens, 'tokens-outside-envelope']);
-  }
-  if (action.concurrency !== undefined && envelope.maxConcurrency !== undefined) {
-    checks.push([action.concurrency <= envelope.maxConcurrency, 'concurrency-outside-envelope']);
+  for (const [value, limit, reason, integer] of [
+    [action.costUsd, envelope.maxCostUsd, 'cost-outside-envelope', false],
+    [action.tokens, envelope.maxTokens, 'tokens-outside-envelope', true],
+    [action.concurrency, envelope.maxConcurrency, 'concurrency-outside-envelope', true],
+  ] as const) {
+    if (limit !== undefined) {
+      checks.push([typeof value === 'number' && Number.isFinite(value) && value >= 0
+        && (!integer || Number.isSafeInteger(value)) && value <= limit, reason]);
+    }
   }
   if (action.network === true) checks.push([envelope.network === true, 'network-outside-envelope']);
   if (action.destructive === true) checks.push([envelope.destructive === true, 'destructive-outside-envelope']);
@@ -120,14 +122,14 @@ export function delegateEnvelope(
 const LIST_FIELDS = ['actions', 'resources', 'tools', 'servers', 'readNamespaces', 'writeNamespaces', 'environments'] as const;
 const NUMBER_FIELDS = ['maxCostUsd', 'maxTokens', 'maxConcurrency', 'delegationDepth', 'expiresAt'] as const;
 const BOOLEAN_FIELDS = ['network', 'destructive'] as const;
+const KNOWN_FIELDS = new Set<string>([...LIST_FIELDS, ...NUMBER_FIELDS, ...BOOLEAN_FIELDS]);
 
 /** Validate at the authority boundary, including callers using plain JSON. */
 export function validateCapabilityEnvelope(value: unknown): asserts value is CapabilityEnvelope {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid-capability-envelope');
   const record = value as Record<string, unknown>;
-  const known = new Set<string>([...LIST_FIELDS, ...NUMBER_FIELDS, ...BOOLEAN_FIELDS]);
   for (const key of Object.keys(record)) {
-    if (!known.has(key)) throw new Error(`invalid-capability-envelope-field:${key}`);
+    if (!KNOWN_FIELDS.has(key)) throw new Error(`invalid-capability-envelope-field:${key}`);
   }
   for (const key of LIST_FIELDS) {
     const list = record[key];
