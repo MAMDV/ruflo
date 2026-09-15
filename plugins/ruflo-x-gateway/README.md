@@ -47,3 +47,10 @@ content as data, not privileged commands.
 The [execution package](execution/README.md) runs three signed local workers,
 independent artifact verification, durable fenced leases, native RuVector routing
 and reproducible fault tests. It is opt-in and does not alter gateway deployment.
+
+## Open protocol specifications
+
+[Ruflo Federation Protocol draft](../../docs/protocol/README.md) documents ANS identity,
+the proposed strict NIP-98 profile, signed machine messages, governance and validation
+evidence. Proposed requirements are distinguished from this gateway's current behavior.
+The draft is not a claim of full implementation conformance or industry ratification.
