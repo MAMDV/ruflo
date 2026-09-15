@@ -6,7 +6,7 @@ export interface EnvelopeCheck {
 }
 
 function matches(patterns: readonly string[] | undefined, value: string | undefined): boolean {
-  if (!patterns?.length) return true;
+  if (patterns === undefined) return true;
   if (!value) return false;
   return patterns.some((pattern) => (
     pattern === '*'
@@ -16,8 +16,8 @@ function matches(patterns: readonly string[] | undefined, value: string | undefi
 }
 
 function subset(child: readonly string[] | undefined, parent: readonly string[] | undefined): boolean {
-  if (!parent?.length) return true;
-  if (!child?.length) return false;
+  if (parent === undefined) return true;
+  if (child === undefined) return false;
   return child.every((value) => matches(parent, value));
 }
 
@@ -26,7 +26,10 @@ export function checkCapabilityEnvelope(
   envelope: CapabilityEnvelope | undefined,
   now = Date.now(),
 ): EnvelopeCheck {
-  if (!envelope) return { allowed: true };
+  if (envelope === undefined) return { allowed: true };
+  try { validateCapabilityEnvelope(envelope); } catch {
+    return { allowed: false, reason: 'invalid-capability-envelope' };
+  }
   if (envelope.expiresAt !== undefined && envelope.expiresAt <= now) {
     return { allowed: false, reason: 'capability-envelope-expired' };
   }
@@ -59,6 +62,7 @@ export function checkCapabilityEnvelope(
 }
 
 export function isEnvelopeReduction(parent: CapabilityEnvelope, child: CapabilityEnvelope): boolean {
+  try { validateCapabilityEnvelope(parent); validateCapabilityEnvelope(child); } catch { return false; }
   const listChecks = [
     subset(child.actions, parent.actions),
     subset(child.resources, parent.resources),
@@ -89,6 +93,8 @@ export function delegateEnvelope(
   parent: CapabilityEnvelope,
   child: CapabilityEnvelope,
 ): CapabilityEnvelope {
+  validateCapabilityEnvelope(parent);
+  validateCapabilityEnvelope(child);
   if ((parent.delegationDepth ?? 0) <= 0) {
     throw new Error('delegation-depth-exhausted');
   }
@@ -105,5 +111,72 @@ export function delegateEnvelope(
     ),
   };
   if (!isEnvelopeReduction(parent, reduced)) throw new Error('capability-envelope-cannot-grow');
-  return reduced;
+  return snapshotEnvelope(reduced);
+}
+
+// Undefined preserves legacy unconstrained lists; an explicit empty list grants
+// nothing. Callers migrating old empty-list configurations must omit the field
+// to retain unrestricted behavior. Never use empty lists to mean wildcard.
+const LIST_FIELDS = ['actions', 'resources', 'tools', 'servers', 'readNamespaces', 'writeNamespaces', 'environments'] as const;
+const NUMBER_FIELDS = ['maxCostUsd', 'maxTokens', 'maxConcurrency', 'delegationDepth', 'expiresAt'] as const;
+const BOOLEAN_FIELDS = ['network', 'destructive'] as const;
+
+/** Validate at the authority boundary, including callers using plain JSON. */
+export function validateCapabilityEnvelope(value: unknown): asserts value is CapabilityEnvelope {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid-capability-envelope');
+  const record = value as Record<string, unknown>;
+  const known = new Set<string>([...LIST_FIELDS, ...NUMBER_FIELDS, ...BOOLEAN_FIELDS]);
+  for (const key of Object.keys(record)) {
+    if (!known.has(key)) throw new Error(`invalid-capability-envelope-field:${key}`);
+  }
+  for (const key of LIST_FIELDS) {
+    const list = record[key];
+    if (list !== undefined && (!Array.isArray(list) || !Array.from(list).every(item =>
+      typeof item === 'string' && item.length > 0 && item.trim() === item
+      && (!item.includes('*') || (item.endsWith('*') && item.indexOf('*') === item.length - 1))))) {
+      throw new Error(`invalid-capability-envelope-field:${key}`);
+    }
+  }
+  for (const key of NUMBER_FIELDS) {
+    const number = record[key];
+    if (number !== undefined && (typeof number !== 'number' || !Number.isFinite(number) || number < 0
+      || (key !== 'maxCostUsd' && !Number.isSafeInteger(number)))) {
+      throw new Error(`invalid-capability-envelope-field:${key}`);
+    }
+  }
+  for (const key of BOOLEAN_FIELDS) {
+    if (record[key] !== undefined && typeof record[key] !== 'boolean') throw new Error(`invalid-capability-envelope-field:${key}`);
+  }
+}
+
+function snapshotEnvelope(envelope: CapabilityEnvelope): CapabilityEnvelope {
+  const copy = { ...envelope };
+  for (const key of LIST_FIELDS) if (envelope[key] !== undefined) copy[key] = [...envelope[key]!];
+  return copy;
+}
+
+/** Intersection is a restriction, not a grant or a delegation-depth spend. */
+export function intersectEnvelopes(...envelopes: (CapabilityEnvelope | undefined)[]): CapabilityEnvelope | undefined {
+  let result: CapabilityEnvelope | undefined;
+  for (const envelope of envelopes) {
+    if (envelope === undefined) continue;
+    validateCapabilityEnvelope(envelope);
+    if (result === undefined) { result = snapshotEnvelope(envelope); continue; }
+    for (const key of LIST_FIELDS) {
+      const left = result[key];
+      const right = envelope[key];
+      if (right === undefined) continue;
+      if (left === undefined) { result[key] = [...right]; continue; }
+      // Our grammar is exact strings and trailing-prefix wildcards, so the
+      // narrower member of each overlapping pair describes its intersection.
+      result[key] = [...new Set(left.flatMap(a => right.flatMap(b =>
+        matches([a], b) ? [b] : matches([b], a) ? [a] : [])))];
+    }
+    for (const key of NUMBER_FIELDS) {
+      if (envelope[key] !== undefined) result[key] = Math.min(result[key] ?? Infinity, envelope[key]!);
+    }
+    // A present envelope only permits these effects when explicitly true.
+    for (const key of BOOLEAN_FIELDS) result[key] = result[key] === true && envelope[key] === true;
+  }
+  return result;
 }

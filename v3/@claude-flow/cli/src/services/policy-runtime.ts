@@ -1,5 +1,6 @@
 import {
   AgenticPolicyEngine,
+  intersectEnvelopes,
   createLegacyCompatibleState,
   isMcpCallerAuthEnabled,
   decodeTokenEnvelope,
@@ -415,6 +416,21 @@ export async function authorizeMcpTool(
       throw new Error('authoritative-worker-policy-root-unavailable');
     }
   }
+  // A tool ceiling must never replace the authority inherited by a worker.
+  // Intersection also validates both envelopes before policy or tool execution.
+  const envelope = processEnvelope && attributes.envelope
+    ? intersectEnvelopes(processEnvelope, attributes.envelope)
+    : processEnvelope ?? attributes.envelope;
+  // Omitted namespaces can mean a handler default OR a query over all namespaces.
+  // Never guess that target when delegated namespace authority is restricted.
+  if (attributes.namespaceAccess && envelope) {
+    const namespaces = attributes.namespaceAccess === 'read'
+      ? envelope.readNamespaces : envelope.writeNamespaces;
+    if (namespaces !== undefined && !namespaces.includes('*')
+      && (typeof input.namespace !== 'string' || input.namespace.length === 0)) {
+      throw new Error('namespace-required-by-capability-envelope');
+    }
+  }
   return evaluatePolicyRequest({
     identity: resolveMcpCallerIdentity(),
     action: {
@@ -431,7 +447,7 @@ export async function authorizeMcpTool(
       destructive: attributes.destructive === true,
     },
     context: {
-      envelope: attributes.envelope ?? processEnvelope,
+      envelope,
       approvalIds: Array.isArray(context.approvalIds) ? context.approvalIds.map(String) : undefined,
       evidence: Array.isArray(context.evidence) ? context.evidence as PolicyEvidence[] : undefined,
       metadata: {
