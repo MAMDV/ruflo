@@ -25,18 +25,49 @@
  *    same tool (found by an independent adversarial critique of the
  *    first version of this fix, which covered spawn/propose/broadcast/
  *    shutdown but missed this one).
+ *  - hive-mind_optimize-memory prunes shared-memory entries with no gate
+ *    either (found in round 2 review, #3339).
  *
- * All six now call the same `requireHiveToken` gate join/leave/vote
+ * All seven now call the same `requireHiveToken` gate join/leave/vote
  * already use. A denied call makes zero state change, verified below by
  * re-reading state.json fresh off disk (simulating a process restart)
  * after each denial.
+ *
+ * Round 2 review (#3339) additionally found that requireHiveToken alone
+ * doesn't "establish authorization" while hive-mind_init -- the
+ * credential-issuance point itself -- was reachable by any caller (to mint
+ * the first token, or have the current one echoed back on re-init).
+ * hive-mind_init now requires its own same-machine `bootstrapSecret`
+ * (getOrCreateBootstrapSecret()) and no longer returns `hiveToken` in its
+ * response. Tests below read the token via `getHiveTokenForCli()` instead,
+ * and a dedicated block covers the bootstrap-secret gate itself, plus a
+ * real child-process CLI-command-level test (not just direct handler
+ * calls) exercising `node bin/cli.js hive-mind init/spawn`.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { hiveMindTools } from '../src/mcp-tools/hive-mind-tools.js';
+import { hiveMindTools, getHiveTokenForCli, getHiveBootstrapSecretForCli } from '../src/mcp-tools/hive-mind-tools.js';
+
+const CLI = join(__dirname, '..', 'bin', 'cli.js');
+
+function runCli(args: string[], cwd: string): { stdout: string; exit: number } {
+  try {
+    const stdout = execFileSync('node', [CLI, ...args], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, CLAUDE_FLOW_CWD: cwd },
+    });
+    return { stdout, exit: 0 };
+  } catch (err) {
+    const e = err as { status?: number; stdout?: Buffer; stderr?: Buffer };
+    return { stdout: (e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? ''), exit: e.status ?? -1 };
+  }
+}
 
 function tool(name: string) {
   const t = hiveMindTools.find((t) => t.name === name);
@@ -71,9 +102,13 @@ describe('hive-mind_spawn / consensus(propose) / broadcast / shutdown capability
   });
 
   async function initHive(): Promise<string> {
-    const init = (await tool('hive-mind_init').handler({ consensus: 'raft' })) as any;
+    const init = (await tool('hive-mind_init').handler({
+      consensus: 'raft',
+      bootstrapSecret: getHiveBootstrapSecretForCli(),
+    })) as any;
     expect(init.success).toBe(true);
-    return init.hiveToken as string;
+    expect(init.hiveToken).toBeUndefined();
+    return getHiveTokenForCli() as string;
   }
 
   it('hive-mind_spawn is denied without the token, and mints zero workers (verified after a fresh state reload)', async () => {
@@ -264,5 +299,115 @@ describe('hive-mind_spawn / consensus(propose) / broadcast / shutdown capability
 
     const persisted = readPersistedState(dir);
     expect(persisted.sharedMemory).toEqual({});
+  });
+
+  it('hive-mind_optimize-memory is denied without the token, and prunes nothing (verified after a fresh state reload)', async () => {
+    const token = await initHive();
+    await tool('hive-mind_memory').handler({ action: 'set', key: 'empty', value: null, hiveToken: token });
+
+    const denied = (await tool('hive-mind_optimize-memory').handler({})) as any;
+    expect(denied.optimized).toBe(false);
+    expect(denied.error).toMatch(/hiveToken is required/);
+
+    const persisted = readPersistedState(dir);
+    expect(persisted.sharedMemory).toEqual({ empty: null });
+  });
+
+  it('hive-mind_optimize-memory succeeds with the correct token', async () => {
+    const token = await initHive();
+    await tool('hive-mind_memory').handler({ action: 'set', key: 'empty', value: null, hiveToken: token });
+
+    const ok = (await tool('hive-mind_optimize-memory').handler({ hiveToken: token })) as any;
+    expect(ok.removed).toBe(1);
+
+    const persisted = readPersistedState(dir);
+    expect(persisted.sharedMemory).toEqual({});
+  });
+
+  describe('hive-mind_init bootstrap-secret gate (round 2 review, #3339)', () => {
+    it('is denied without a bootstrapSecret on first-time (fresh) init, and mints no hive at all', async () => {
+      const denied = (await tool('hive-mind_init').handler({ consensus: 'raft' })) as any;
+      expect(denied.success).toBe(false);
+      expect(denied.error).toBe('bootstrapSecret is required');
+
+      // No state.json was ever written -- there is nothing to "reload":
+      // the whole point is that an unauthenticated first call must not be
+      // able to bootstrap a hive at all.
+      expect(existsSync(join(dir, '.claude-flow', 'hive-mind', 'state.json'))).toBe(false);
+    });
+
+    it('is denied with a forged bootstrapSecret, and mints no hive', async () => {
+      const denied = (await tool('hive-mind_init').handler({
+        consensus: 'raft',
+        bootstrapSecret: 'forged-secret-attacker-guessed',
+      })) as any;
+      expect(denied.success).toBe(false);
+      expect(denied.error).toBe('Invalid bootstrapSecret');
+      expect(existsSync(join(dir, '.claude-flow', 'hive-mind', 'state.json'))).toBe(false);
+    });
+
+    it('never echoes the real bootstrap secret back to a denied caller, even though denial forces it to be generated', async () => {
+      const denied = (await tool('hive-mind_init').handler({
+        consensus: 'raft',
+        bootstrapSecret: 'wrong',
+      })) as any;
+      // The bug this guards: requireBootstrapSecret() must generate the
+      // real secret server-side to compare against, but must never leak it
+      // in the response merely because a caller who doesn't have it asked.
+      expect(JSON.stringify(denied)).not.toContain(getHiveBootstrapSecretForCli());
+    });
+
+    it('succeeds with the correct bootstrapSecret', async () => {
+      const token = await initHive();
+      expect(typeof token).toBe('string');
+    });
+
+    it('re-init on an already-initialized hive is ALSO denied without the bootstrapSecret, and changes nothing (verified after a fresh state reload)', async () => {
+      await initHive();
+      const before = readPersistedState(dir);
+
+      const denied = (await tool('hive-mind_init').handler({ consensus: 'byzantine', topology: 'ring' })) as any;
+      expect(denied.success).toBe(false);
+      expect(denied.error).toBe('bootstrapSecret is required');
+
+      const after = readPersistedState(dir);
+      expect(after).toEqual(before);
+    });
+
+    it('re-init with the correct bootstrapSecret succeeds and keeps the existing hiveToken (does not rotate it)', async () => {
+      const token = await initHive();
+
+      const reinit = (await tool('hive-mind_init').handler({
+        consensus: 'byzantine',
+        bootstrapSecret: getHiveBootstrapSecretForCli(),
+      })) as any;
+      expect(reinit.success).toBe(true);
+
+      expect(getHiveTokenForCli()).toBe(token);
+    });
+  });
+
+  describe('real CLI-process integration (not just direct handler calls)', () => {
+    it('`hive-mind init` then `hive-mind spawn` succeed end-to-end through the actual CLI binary in a fresh child process', () => {
+      const initResult = runCli(['hive-mind', 'init', '--consensus', 'raft'], dir);
+      expect(initResult.exit).toBe(0);
+      expect(existsSync(join(dir, '.claude-flow', 'hive-mind', 'state.json'))).toBe(true);
+
+      // Fresh state read (this is a separate `node` process from the one
+      // that ran init -- no in-process cache of any kind survives between
+      // these two runCli() calls).
+      const spawnResult = runCli(['hive-mind', 'spawn', '--count', '1'], dir);
+      expect(spawnResult.exit).toBe(0);
+
+      const persisted = readPersistedState(dir) as any;
+      expect(persisted.workers.length).toBe(1);
+    });
+
+    it('a raw MCP-style call with no bootstrapSecret cannot bootstrap a hive via the real dispatch path either (spawning `hive-mind spawn` with no prior init fails)', () => {
+      // No init was ever run in this fresh temp dir/process.
+      const spawnResult = runCli(['hive-mind', 'spawn', '--count', '1'], dir);
+      expect(spawnResult.exit).not.toBe(0);
+      expect(existsSync(join(dir, '.claude-flow', 'hive-mind', 'state.json'))).toBe(false);
+    });
   });
 });

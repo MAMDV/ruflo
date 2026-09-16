@@ -15,7 +15,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { resolveClaudeLaunchCommand } from '../runtime/claude-command.js';
-import { getHiveTokenForCli } from '../mcp-tools/hive-mind-tools.js';
+import { getHiveTokenForCli, getHiveBootstrapSecretForCli } from '../mcp-tools/hive-mind-tools.js';
 
 // Worker type definitions for prompt generation
 interface HiveWorker {
@@ -509,7 +509,8 @@ const initCommand: Command = {
       consensus: consensus || 'byzantine',
       maxAgents: ctx.flags.maxAgents as number || 15,
       persist: ctx.flags.persist as boolean,
-      memoryBackend: ctx.flags.memoryBackend as string || 'hybrid'
+      memoryBackend: ctx.flags.memoryBackend as string || 'hybrid',
+      bootstrapSecret: getHiveBootstrapSecretForCli(),
     };
 
     output.writeln();
@@ -1123,6 +1124,7 @@ const optimizeMemoryCommand: Command = {
       }>('hive-mind_optimize-memory', {
         aggressive,
         qualityThreshold: threshold,
+        hiveToken: getHiveTokenForCli(),
       });
 
       spinner.succeed('Memory optimized');

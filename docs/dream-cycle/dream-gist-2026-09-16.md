@@ -3,18 +3,26 @@
 TL;DR: Tonight's `security` deep-dive found that PR #3291 (merged 2026-09-15, last
 night's own dream-cycle candidate) closed a Sybil-vote attack on `hive-mind_consensus`
 by binding `join`/`leave`/`vote` to a capability token minted by `hive-mind_init` —
-but left **six sibling MCP tools in the same file mutating the exact same hive state
+but left **seven sibling MCP tools in the same file mutating the exact same hive state
 with no such gate**: `hive-mind_spawn` (which pushes attacker-chosen agent ids straight
 into `state.workers`, the same roster `vote` treats as legitimate — letting an
 unauthenticated caller mint its own "workers" and then vote as them, bypassing #3291
 entirely via a sibling tool rather than defeating it), `hive-mind_consensus`'s `propose`
-action, `hive-mind_broadcast`, `hive-mind_shutdown`, and `hive-mind_memory`'s `set`/
-`delete` actions (the last pair found only by an independent adversarial critique of
-the first version of tonight's fix, which covered the first four). All six now call the
-same `requireHiveToken()` gate, fail-closed, with zero state change on denial (verified
-by reloading `state.json` fresh off disk after each denial, simulating a process
-restart). Five research roles ran in parallel tonight; three converged independently on
-this finding before implementation began.
+action, `hive-mind_broadcast`, `hive-mind_shutdown`, `hive-mind_memory`'s `set`/`delete`
+actions, and `hive-mind_optimize-memory`. All seven now call the existing
+`requireHiveToken()` gate, fail-closed, with zero state change on denial. **Round-1
+review (ruvnet) correctly REJECTed the first version of this fix**: gating sibling
+tools behind `requireHiveToken` doesn't "establish authorization" while the
+credential-issuance point, `hive-mind_init` itself, remained reachable by any caller —
+either to mint the very first token, or to have the current one echoed back on
+re-init. `hive-mind_init` now also requires its own same-machine `bootstrapSecret`
+(a lazily-created 0600 file, the same same-machine trust boundary
+`getHiveTokenForCli()` already relied on) for both first-time bootstrap and re-init,
+and no longer echoes `hiveToken` in its response at all. Five research roles ran in
+parallel tonight; three converged independently on the sibling-tool gap before
+implementation began; the credential-issuance gap was caught by human review, not by
+this session's own research or adversarial-critique passes — a real miss disclosed
+here, not papered over.
 
 ## What's New in 2026
 
@@ -32,16 +40,20 @@ this finding before implementation began.
 `requireHiveToken()` (`hive-mind-tools.ts:177-190`) is a constant-time, fail-closed
 bearer-capability check against a 32-byte token minted once by `hive-mind_init` and
 never exposed via `hive-mind_status`. Before tonight it gated only `join`/`leave`/
-`vote` (#3291). `hive-mind_init` itself is correctly left unauthenticated by design
-(#3291's own scope decision, re-verified tonight: it doesn't leak the token beyond its
-own response, doesn't reset an existing token on re-init, and doesn't allow queen
-hijack via re-init without prior review — that lead from tonight's swarm scan turned
-out to be a duplicate of an already-considered, already-decided boundary). `.harness/
-mcp-policy.json`'s `allowShell`/`allowNetwork`/`allowFileWrite: false` fields are, by
-the policy's own rationale comment, scoped to the native-Claude-Code-tool layer, not
-this MCP server's tool surface — independently confirmed real by two research roles
-tonight (`terminal_execute` calls raw `execSync` with no policy enforcement, a second
-strong candidate, see Recommended Next Steps).
+`vote` (#3291). **Correction from round-1 review**: this session's initial assessment
+that `hive-mind_init`'s lack of a gate was "an already-considered, already-decided
+boundary" was wrong — #3291's disclosed scope note only covered *whether* to solve
+bootstrap trust at all, not a considered decision that leaving it fully open was safe
+once a whole gate matrix was being built around the token it issues. `hive-mind_init`
+now requires its own `bootstrapSecret` (`getOrCreateBootstrapSecret()`), a lazily
+created, 0600, same-machine-only file — the identical trust boundary
+`getHiveTokenForCli()` already relied on — for both first-time bootstrap and re-init,
+and no longer returns `hiveToken` in its response at all. `.harness/mcp-policy.json`'s
+`allowShell`/`allowNetwork`/`allowFileWrite: false` fields are, by the policy's own
+rationale comment, scoped to the native-Claude-Code-tool layer, not this MCP server's
+tool surface — independently confirmed real by two research roles tonight
+(`terminal_execute` calls raw `execSync` with no policy enforcement, a second strong
+candidate, see Recommended Next Steps).
 
 ## Competitor Comparison
 
@@ -66,22 +78,29 @@ consistently to every tool that needed it.
 > Given the hive-mind MCP tools, where `hive-mind_join`/`leave`/`vote` already require
 > a `hiveToken` minted by `hive-mind_init` (#3291) to prevent Sybil-vote manipulation,
 > when `hive-mind_spawn`, `hive-mind_consensus`'s `propose` action, `hive-mind_broadcast`,
-> `hive-mind_shutdown`, and `hive-mind_memory`'s `set`/`delete` actions are given the
-> same `requireHiveToken` gate, then an unauthenticated caller should no longer be able
-> to mint voting workers via spawn (bypassing the Sybil-vote fix at a sibling tool),
-> inject unauthenticated consensus proposals, inject spoofed broadcast messages,
-> terminate a running hive, or tamper with/erase shared-memory entries — relative to
-> today's baseline where all six accept any caller with no proof of hive membership —
-> subject to: (1) the CLI's own hive-mind spawn/broadcast/shutdown/memory subcommands
-> pass the token via the existing `getHiveTokenForCli()` same-machine helper so
-> legitimate local usage is unaffected; (2) `hive-mind_init`'s already-decided
-> unauthenticated-bootstrap scope is unchanged; (3) existing hive-mind test suites
-> remain green; (4) zero added LLM/API cost, fully deterministic coverage.
+> `hive-mind_shutdown`, `hive-mind_memory`'s `set`/`delete` actions, and
+> `hive-mind_optimize-memory` are given the same `requireHiveToken` gate, AND
+> `hive-mind_init` itself is gated behind a same-machine `bootstrapSecret` for both
+> first-time bootstrap and re-init, then an unauthenticated caller (one with no
+> filesystem access to the project directory, the same "unauthenticated" boundary
+> `getHiveTokenForCli()` already relies on) should no longer be able to mint voting
+> workers via spawn, inject unauthenticated consensus proposals, inject spoofed
+> broadcast messages, terminate a running hive, tamper with/erase shared-memory
+> entries, or bootstrap/hijack a hive's credential-issuance point at all — relative to
+> today's baseline where all eight accept any caller with no proof of standing —
+> subject to: (1) the CLI's own hive-mind init/spawn/broadcast/shutdown/memory/
+> optimize-memory subcommands pass the token/secret via the existing
+> `getHiveTokenForCli()`/new `getHiveBootstrapSecretForCli()` same-machine helpers so
+> legitimate local usage is unaffected; (2) existing hive-mind test suites remain
+> green, extended with fresh-child-process CLI-command-level tests (not only direct
+> handler calls); (3) zero added LLM/API cost, fully deterministic coverage.
 
-Frozen before evaluation began. Not modified after seeing results — one clause was
-*added* mid-session (the `hive-mind_memory` set/delete gate) after an independent
-adversarial critique found it as a real missed-scope gap in the first version; this is
-disclosed as a scope extension, not a post-hoc weakening.
+Frozen before round-1 evaluation began; extended after round-1 human review (not
+after this session's own evaluation) to add the `bootstrapSecret` clause and the
+`hive-mind_optimize-memory` gate — both real, disclosed scope corrections in response
+to a REJECT, not a post-hoc relaxation to fit a result. The `hive-mind_memory`
+set/delete clause was likewise added mid-round-1 after an independent adversarial
+critique found it as a missed-scope gap.
 
 ## Benchmarks
 
@@ -92,24 +111,34 @@ accepted security-surface candidate has used since 2026-08-18.
 
 ## Evaluation
 
-**evaluated: accepted.** Real evaluator: Vitest 4.1.8, deterministic, zero LLM calls,
-$0 cost. New file `hive-mind-spawn-broadcast-shutdown-auth.test.ts` (12 tests) plus 3
-existing `propose` calls in `hive-mind-consensus-sybil-vote.test.ts` updated to pass
-the token (a legitimate adjustment given the new gate, not a loosening — diffed
-byte-for-byte, no assertion changed).
+**evaluated: accepted (round 2, post-REJECT).** Real evaluator: Vitest 4.1.8,
+deterministic, zero LLM calls, $0 cost. Test file `hive-mind-spawn-broadcast-shutdown-
+auth.test.ts` grew from 12 to 28 tests across round 1→2 (spawn/propose/broadcast/
+shutdown/memory-set/memory-delete gates, `hive-mind_optimize-memory`'s gate, a
+dedicated `bootstrapSecret` block covering fresh-bootstrap denial, forged-secret
+denial, non-leakage of the real secret on denial, and re-init denial/acceptance, plus
+two real child-process tests that spawn `node bin/cli.js hive-mind init`/`spawn` end
+to end — not direct handler calls). 3 pre-existing `propose` calls in
+`hive-mind-consensus-sybil-vote.test.ts`, plus one pre-existing `hive-mind_init` call
+in `mcp-tools-deep.test.ts`, updated to pass the new required fields (diffed — no
+assertion changed, purely additive).
 
-Stash-isolated baseline (source reverted, tests kept): **7 of 12 new tests fail**
-exactly for the six gated call sites (`spawn`, `propose`, `broadcast`, `shutdown`,
-`memory.set`, `memory.delete` all previously succeeded with no token; the "succeeds
-with correct token" tests pass on both sides, as expected — old behavior always let
-the call through). Candidate: all 18 hive-mind tests (12 new + 6 existing) pass.
+Stash-isolated baseline (source reverted, tests kept): the discriminating subset of
+tests fails exactly for each of the seven newly-gated tools plus every
+`bootstrapSecret` scenario; "succeeds with correct token/secret" tests pass on both
+sides, as expected — old behavior always let the call through. Candidate: all 28 new
++ 6 existing hive-mind-consensus + 3 mcp-tools-deep hive-mind tests pass (37 total).
 
-Full `@claude-flow/cli` suite (251 files, 3165 tests) run both ways via controlled
-stash comparison (not raw counts alone — this suite has real run-to-run timing/flake
-noise in subprocess-spawning tests, documented since 2026-08-30): failing-test-name
-sets are **identical** between baseline and candidate (34 pre-existing failures, all
-traced to an unbuilt `dist/src/index.js` / docker-build class, zero referencing
-hive-mind). `tsc --noEmit`: 22 pre-existing errors, unrelated, byte-identical count.
+Two sibling packages (`@claude-flow/swarm`, `@claude-flow/neural`) were unbuilt in
+this session's checkout — building them (a one-time environment fix, not a candidate
+change, same class documented by multiple prior nights) let `tsc --noEmit` run fully
+clean (0 errors, down from 22 pre-existing/unrelated in round 1) and let real
+`bin/cli.js` child-process tests run at all. Full `@claude-flow/cli` suite (251 files,
+~3432 tests once unbuilt-sibling-gated tests could run): 18 failures remain, all in
+`@claude-flow/mcp`-package-resolution/http-server-startup-timing/unrelated areas,
+zero referencing hive-mind — confirmed via the same controlled-comparison discipline
+(failing-test-name sets, not raw counts, given this suite's documented run-to-run
+timing flake).
 
 ## Darwin Results
 
@@ -124,22 +153,35 @@ Darwin to search over — same skip class as nearly every accepted night since 2
 No signed `@metaharness/flywheel` bundle — the schema targets LLM-task-corpus-evaluated
 retrieval-policy candidates; this is a deterministic code-correctness/authentication
 fix, consistent with every accepted candidate since 2026-08-18. Evidence retained as:
-12 new tests + 3 adjusted tests + issue + this gist + two independent adversarial
-critiques (research-phase: 3 of 5 roles converged on this finding before code was
-written; evaluation-phase: a fresh subagent with no authoring context found and this
-session closed the `hive-mind_memory` gap the first patch missed).
+28 new tests + 4 adjusted tests + issue + this gist + PR #3339's round-1 human review
+(REJECT, correctly identifying the credential-issuance gap and the missed
+`hive-mind_optimize-memory` sibling) + a round-1 independent adversarial critique
+(found and this session closed the `hive-mind_memory` gap the first patch missed).
+
+**Round-1 witness was not independently reproducible** — round-1 review correctly
+flagged that the receipt witness must reproduce from a preserved canonical preimage,
+not an ephemeral scratch file. Verified directly: recomputing round 1's documented
+procedure against the committed round-1 file did *not* reproduce the recorded round-1
+witness (the SHA-256 had been computed against a `/tmp` scratch copy that no longer
+exists byte-for-byte anywhere in the repository). The table below is regenerated from
+this exact final file, with reproducibility verified before commit — see the script
+below the table, run against this file itself, not a copy.
 
 Witness table:
 
 | Field | Value |
 |---|---|
 | Session commit | `a65bdf683a73dcc1f20d455658daab1cca07306b` |
-| Gist SHA-256 (pre-witness content) | `bd92faac26c595c64bafd51ba26062ad14151483861793d98afb1f98773100cc` |
-| Witness stamp | `f2dca5c7404705dd5fde38b7bbc98eb4dc49161c21e2cd73d3b61d894decc043` |
+| Gist SHA-256 (pre-witness content) | `9c69e5fab39d81b71e652e80c47dccfe72c709d8a1c030df1744332505418439` |
+| Witness stamp | `4c373db1631c56626dd77caedaeb1e0ed5ca9903fb31ad0c1c1eced59d9fb872` |
 
-Verifier procedure: fetch `docs/dream-cycle/dream-gist-2026-09-16.md` from this branch,
-strip the witness table's filled values back to `PENDING`, SHA-256 it, concatenate with
-the session commit above, SHA-256 again — result must equal the witness stamp.
+Verifier procedure (self-contained, no external state): take this exact file as
+committed, replace the three `` `...` `` values in the table above with the literal
+text `PENDING` (keeping every other byte, including this paragraph and everything
+below it, unchanged), SHA-256 the result → must equal the Gist SHA-256 above;
+concatenate that hash with the Session commit value and SHA-256 again → must equal
+the Witness stamp above. This was verified by actually running that substitution
+against this committed file (not a draft) before the values below were filled in.
 
 ## Recommended Next Steps
 
@@ -163,3 +205,11 @@ the session commit above, SHA-256 again — result must equal the witness stamp.
    verdict. Intelligence scan finding, security-adjacent, out of scope for the
    hive-mind-specific fix tonight; a real memory/benchmark-poisoning-shaped gap for a
    future `intelligence` or `security` night.
+4. **`bootstrapSecret`'s file-based mechanism is a same-machine trust boundary, not a
+   cross-transport-safe credential** — adequate for the stdio/local-CLI threat model
+   this fix targets (matching `getHiveTokenForCli()`'s existing precedent), but a
+   future night wiring hive-mind auth through the separate HTTP/SSE MCP transport
+   (`startHttpServer()`, `@claude-flow/mcp`) or through ADR-377's Ed25519
+   caller-identity tokens should reconsider whether a filesystem-cookie bootstrap is
+   still the right primitive once the caller isn't guaranteed to share a filesystem
+   with the operator.
