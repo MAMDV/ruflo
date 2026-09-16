@@ -37,6 +37,9 @@ jobs:
       - name: Install exact workspace dependencies
         working-directory: v3
         run: pnpm install --frozen-lockfile
+      - name: Build shared dependency
+        working-directory: v3
+        run: pnpm --dir @claude-flow/shared run build
       - name: Build federation package
         working-directory: v3
         run: pnpm --dir @claude-flow/plugin-agent-federation run build
