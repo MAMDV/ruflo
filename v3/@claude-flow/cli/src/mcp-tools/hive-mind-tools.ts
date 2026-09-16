@@ -275,13 +275,26 @@ export const hiveMindTools: MCPTool[] = [
         role: { type: 'string', enum: ['worker', 'specialist', 'scout'], description: 'Worker role in hive', default: 'worker' },
         agentType: { type: 'string', description: 'Agent type for spawned workers', default: 'worker' },
         prefix: { type: 'string', description: 'Prefix for worker IDs', default: 'hive-worker' },
+        hiveToken: { type: 'string', description: 'Capability token minted by hive-mind_init' },
       },
+      required: ['hiveToken'],
     },
     handler: async (input) => {
       const state = loadHiveState();
 
       if (!state.initialized) {
         return { success: false, error: 'Hive-mind not initialized. Run hive-mind/init first.' };
+      }
+
+      // Fail-closed: spawned agents are pushed straight into state.workers,
+      // which hive-mind_consensus's vote tally treats as legitimate voting
+      // roster members (`state.workers.includes(voterId)`). Without this
+      // gate, an unauthenticated caller could mint arbitrary "workers" here
+      // and then vote as them -- bypassing #3291's join/leave/vote Sybil
+      // fix entirely via this sibling tool. No token, no spawn.
+      const tokenError = requireHiveToken(state, input.hiveToken);
+      if (tokenError) {
+        return { success: false, error: tokenError };
       }
 
       if (input.agentType) { const v = validateIdentifier(input.agentType as string, 'agentType'); if (!v.valid) return { success: false, error: v.error }; }
@@ -620,6 +633,16 @@ export const hiveMindTools: MCPTool[] = [
       const totalNodes = state.workers.length || 1;
 
       if (action === 'propose') {
+        // Fail-closed: an unauthenticated caller could otherwise inject
+        // arbitrary consensus proposals (type/value of their choosing) for
+        // legitimate workers to vote on, or exhaust raft's one-pending-
+        // proposal-per-term slot as a denial-of-service. No token, no
+        // proposal recorded.
+        const proposeTokenError = requireHiveToken(state, input.hiveToken);
+        if (proposeTokenError) {
+          return { action, error: proposeTokenError };
+        }
+
         const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const quorumPreset = (input.quorumPreset as QuorumPreset) || 'majority';
         const term = (input.term as number) || (state.queen?.term ?? 1);
@@ -941,14 +964,23 @@ export const hiveMindTools: MCPTool[] = [
         message: { type: 'string', description: 'Message to broadcast' },
         priority: { type: 'string', enum: ['low', 'normal', 'high', 'critical'], description: 'Message priority' },
         fromId: { type: 'string', description: 'Sender agent ID' },
+        hiveToken: { type: 'string', description: 'Capability token minted by hive-mind_init' },
       },
-      required: ['message'],
+      required: ['message', 'hiveToken'],
     },
     handler: async (input) => {
       const state = loadHiveState();
 
       if (!state.initialized) {
         return { success: false, error: 'Hive-mind not initialized' };
+      }
+
+      // Fail-closed: no token, no message stored -- otherwise any caller
+      // could inject spoofed broadcasts (arbitrary fromId) into shared
+      // memory that every real worker reads.
+      const tokenError = requireHiveToken(state, input.hiveToken);
+      if (tokenError) {
+        return { success: false, error: tokenError };
       }
 
       { const v = validateText(input.message as string, 'message'); if (!v.valid) return { success: false, error: v.error }; }
@@ -988,13 +1020,23 @@ export const hiveMindTools: MCPTool[] = [
       properties: {
         graceful: { type: 'boolean', description: 'Graceful shutdown (wait for pending tasks)', default: true },
         force: { type: 'boolean', description: 'Force immediate shutdown', default: false },
+        hiveToken: { type: 'string', description: 'Capability token minted by hive-mind_init' },
       },
+      required: ['hiveToken'],
     },
     handler: async (input) => {
       const state = loadHiveState();
 
       if (!state.initialized) {
         return { success: false, error: 'Hive-mind not initialized or already shut down' };
+      }
+
+      // Fail-closed: no token, no shutdown -- otherwise any caller could
+      // terminate a running hive (wiping workers/pending consensus/shared
+      // memory) as a denial-of-service with zero proof of membership.
+      const tokenError = requireHiveToken(state, input.hiveToken);
+      if (tokenError) {
+        return { success: false, error: tokenError };
       }
 
       const graceful = input.graceful !== false;
@@ -1054,6 +1096,7 @@ export const hiveMindTools: MCPTool[] = [
         action: { type: 'string', enum: ['get', 'set', 'delete', 'list'], description: 'Memory action' },
         key: { type: 'string', description: 'Memory key' },
         value: { description: 'Value to store (for set)' },
+        hiveToken: { type: 'string', description: 'Capability token minted by hive-mind_init (required for set/delete)' },
       },
       required: ['action'],
     },
@@ -1076,6 +1119,14 @@ export const hiveMindTools: MCPTool[] = [
 
       if (action === 'set') {
         if (!key) return { action, error: 'Key required' };
+        // Fail-closed: no token, no write -- otherwise any caller could
+        // tamper with or inject entries into shared memory every worker
+        // and the queen read, the same attack class hive-mind_broadcast
+        // was gated for.
+        const tokenError = requireHiveToken(state, input.hiveToken);
+        if (tokenError) {
+          return { action, key, error: tokenError };
+        }
         state.sharedMemory[key] = input.value;
         saveHiveState(state);
 
@@ -1099,6 +1150,11 @@ export const hiveMindTools: MCPTool[] = [
 
       if (action === 'delete') {
         if (!key) return { action, error: 'Key required' };
+        // Fail-closed, same reasoning as 'set' above.
+        const tokenError = requireHiveToken(state, input.hiveToken);
+        if (tokenError) {
+          return { action, key, error: tokenError };
+        }
         const existed = key in state.sharedMemory;
         delete state.sharedMemory[key];
         saveHiveState(state);

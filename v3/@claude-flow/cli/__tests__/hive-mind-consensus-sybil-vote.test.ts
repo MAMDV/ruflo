@@ -129,6 +129,7 @@ describe('hive-mind_consensus / join / leave capability-token authentication', (
       type: 'test',
       value: 'x',
       strategy: 'raft',
+      hiveToken: token,
     }) as any;
     expect(propose.status).toBe('pending');
 
@@ -180,6 +181,7 @@ describe('hive-mind_consensus / join / leave capability-token authentication', (
       type: 'test',
       value: 'x',
       strategy: 'raft',
+      hiveToken: token,
     }) as any;
 
     const vote = await tool('hive-mind_consensus').handler({
@@ -207,6 +209,7 @@ describe('hive-mind_consensus / join / leave capability-token authentication', (
       type: 'test',
       value: 'x',
       strategy: 'bft',
+      hiveToken: token,
     }) as any;
 
     for (const voterId of ['sybil-a', 'sybil-b', 'sybil-c']) {
