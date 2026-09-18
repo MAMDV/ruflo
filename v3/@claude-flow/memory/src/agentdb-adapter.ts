@@ -182,18 +182,34 @@ export class AgentDBAdapter extends EventEmitter implements IMemoryBackend {
       entry.embedding = await this.config.embeddingGenerator(entry.content);
     }
 
+    // Namespace is resolved once, up front, so the dedup lookup below and the
+    // index updates further down agree on the same value.
+    const namespace = entry.namespace || this.config.defaultNamespace;
+    const keyIndexKey = `${namespace}:${entry.key}`;
+
+    // Idempotent upsert-by-key (Dream Cycle 2026-09-18): entry.id is always a
+    // fresh random id (generateMemoryId()), so a second store() under the same
+    // (namespace, key) previously left the prior occupant as an orphan —
+    // unreachable via getByKey()/keyIndex, but still live in entries/
+    // namespaceIndex/tagIndex and, for embedded entries, still a point in the
+    // HNSW index, so search()/semanticSearch() returned stale duplicates
+    // forever. Evict the prior occupant via this adapter's own existing,
+    // already-tested delete() path before storing the new entry.
+    const existingId = this.keyIndex.get(keyIndexKey);
+    if (existingId && existingId !== entry.id) {
+      await this.delete(existingId);
+    }
+
     // Store in main storage
     this.entries.set(entry.id, entry);
 
     // Update namespace index
-    const namespace = entry.namespace || this.config.defaultNamespace;
     if (!this.namespaceIndex.has(namespace)) {
       this.namespaceIndex.set(namespace, new Set());
     }
     this.namespaceIndex.get(namespace)!.add(entry.id);
 
     // Update key index
-    const keyIndexKey = `${namespace}:${entry.key}`;
     this.keyIndex.set(keyIndexKey, entry.id);
 
     // Update tag index
