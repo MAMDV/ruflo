@@ -58,13 +58,17 @@ No standalone reward-hack CLI reachable. Manual checklist: no existing test weak
 
 Not security-sensitive: pure in-process bookkeeping (reuse of the existing `delete()` path), no new I/O/network/credential/filesystem surface. The disclosed concurrency gap (above) is a correctness/data-integrity risk under concurrent writers, not a security boundary issue.
 
+## Post-review addendum (2026-09-18, same night)
+
+ruvnet reviewed at `eb499928c` and found two further public-path gaps the first pass missed: (1) `AgentDBAdapter.bulkInsert()` — which `UnifiedMemoryService.bulkInsert()` forwards to — bypassed the same-key dedup entirely, so a batch with duplicate `(namespace,key)` values or one replacing an already-stored key still left old ids reachable; (2) `store()` deleted the prior occupant *before* validating the replacement via `HNSWIndex.addPoint()` (fallible: dimension mismatch, full index), so a rejected write lost the prior value outright instead of merely duplicating it. Both fixed in `8636bbac5`: `bulkInsert()` now computes superseded ids (pre-existing occupant + intra-batch duplicate-key losers) from a pre-mutation snapshot and evicts them via a shared `evictEntry()` primitive after the batch is indexed; `store()` now runs `addPoint()` before eviction, so a rejected replacement fails clean. 5 new tests added per the review's request, including a hand-built two-promise-gate harness for the disclosed concurrent-store race (a plain `setTimeout` delay does not actually interleave two async calls in Node — confirmed empirically, the first attempt at this test could not reproduce the race at all). Full suite: 521→526 passed (+5), same 1 pre-existing unrelated failure, `tsc --noEmit` clean.
+
 ## SOTA Proof & Witness
 
 | Field | Value |
 |---|---|
 | Session commit | `e558f0c0fc29c1a658085f6e6f80ad27d4fe811f` |
-| Gist SHA-256 (pre-witness content) | `f4098abf2915651815e88fea76be0074965693474bd497aafc42aab2d9d8fcfb` |
-| Witness stamp | `e698eaff6ba1483cc22b42028cf23f1c1c1d551b47439bfe886bf20296778f77` |
+| Gist SHA-256 (pre-witness content) | `c5c9c86da1136fd9280a8a1a40b58679e993bd02574c10756103ba3f3663650a` |
+| Witness stamp | `d4d020625c6468c7c955e0081ab7eb74ef2259ca4e4dd0a50a0e02f511bbf82f` |
 
 Verifier procedure: fetch this gist, strip the witness table's filled values back to `PENDING`, SHA-256 the result, concatenate with the session commit above, SHA-256 again — result must equal the witness stamp.
 
@@ -92,7 +96,7 @@ Scored under `0.25·Ruflo_fit + 0.20·testability + 0.20·measurability + 0.15·
 ## Recommended Next Steps
 
 1. **Merge tonight's linked draft PR** (human review required).
-2. **Add a per-key async lock to `AgentDBAdapter.store()`** — the adversarial critic's disclosed gap: sequential re-stores are now safe, concurrent `Promise.all()` re-stores of the same key are not.
+2. **Add a per-key async lock to `AgentDBAdapter.store()`/`bulkInsert()`** — the still-open, now-doubly-disclosed gap (adversarial critic, then human review): sequential re-stores and same-batch/batch-vs-pre-existing replacements are now safe, concurrent `Promise.all()` re-stores of the same key across separate calls are not.
 3. **Fix candidate B** (HNSW binary/scalar quantization distance dispatch) — same mechanical shape as the already-reviewed PQ fix.
 4. **Check `auto-memory-bridge.ts`'s hash-dedup path for the same TOCTOU race Mem0 just filed** (#6531) — structurally similar snapshot-then-insert shape, not verified either way tonight.
 5. **Merge draft PR #3205** (`dream-cycle-backlog-guard.yml`) — the missing heartbeat for exactly the no-run-gap class tonight's automation scan re-confirmed.
