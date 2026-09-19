@@ -160,6 +160,8 @@ export class MCPServerManager extends EventEmitter {
   private startTime?: Date;
   private healthCheckInterval?: NodeJS.Timeout;
   private mcpServers: Array<{ stop(): Promise<void> }> = [];
+  /** True once this manager has served stdio; such a server stays out of the PID file (#3364). */
+  private servedStdio = false;
 
   constructor(options: MCPServerOptions = {}) {
     super();
@@ -177,12 +179,25 @@ export class MCPServerManager extends EventEmitter {
    * Start the MCP server
    */
   async start(): Promise<MCPServerStatus> {
+    // #3364: the PID file is a single slot per os.tmpdir() (per user on
+    // macOS/Windows; the machine-wide /tmp on Linux unless TMPDIR is set), and
+    // it records the port-bound (http/websocket) server, where a second
+    // instance would conflict. A stdio server is owned by the client that
+    // spawned it and any number run side by side (one per MCP client or
+    // project), so a stdio server never claims that slot, and never refuses to
+    // start over — or clears — a live server's record. ADR-071 made this
+    // singleton safe against self-detection and PID reuse; a stdio server has
+    // no business claiming it at all.
+    const usesPidFile = this.options.transport !== 'stdio';
+
     // Check if already running (skip if status reports our own PID —
     // getStatus() returns running=true for the current process in stdio mode
     // even before the server is actually started)
-    const status = await this.getStatus();
-    if (status.running && status.pid !== process.pid) {
-      throw new Error(`MCP Server already running (PID: ${status.pid})`);
+    if (usesPidFile) {
+      const status = await this.getStatus();
+      if (status.running && status.pid !== process.pid) {
+        throw new Error(`MCP Server already running (PID: ${status.pid})`);
+      }
     }
 
     const startTime = performance.now();
@@ -194,6 +209,7 @@ export class MCPServerManager extends EventEmitter {
       if (this.options.transport === 'stdio') {
         // For stdio transport, spawn the server process
         await this.startStdioServer();
+        this.servedStdio = true;
       } else {
         // For HTTP/WebSocket, start in-process server
         await this.startHttpServer();
@@ -202,7 +218,9 @@ export class MCPServerManager extends EventEmitter {
       const duration = performance.now() - startTime;
 
       // Write PID file
-      await this.writePidFile();
+      if (usesPidFile) {
+        await this.writePidFile();
+      }
 
       // Start health check monitoring
       this.startHealthMonitoring();
@@ -268,8 +286,12 @@ export class MCPServerManager extends EventEmitter {
         await Promise.all(servers.map((server) => server.stop()));
       }
 
-      // Remove PID file
-      await this.removePidFile();
+      // Remove PID file (a stdio server never wrote it; any record belongs to
+      // another server, so the flag stays set — a second stop() must not
+      // delete that server's record either)
+      if (!this.servedStdio) {
+        await this.removePidFile();
+      }
 
       this.startTime = undefined;
       this.emit('stopped');
@@ -283,8 +305,9 @@ export class MCPServerManager extends EventEmitter {
    * Get server status
    */
   async getStatus(): Promise<MCPServerStatus> {
-    // Check PID file
-    const pid = await this.readPidFile();
+    // Check PID file (a manager that serves stdio reports itself: a recorded
+    // PID belongs to some other server, #3364)
+    const pid = this.servedStdio ? null : await this.readPidFile();
 
     if (!pid) {
       // No PID file found. Detect if we are running in stdio mode
@@ -344,6 +367,13 @@ export class MCPServerManager extends EventEmitter {
     metrics?: Record<string, number>;
   }> {
     if (this.options.transport === 'stdio') {
+      // #3364: a manager that serves stdio is the server, so it is healthy by
+      // definition. Without this it would read the PID file it deliberately
+      // never wrote and report another server's health (or, every 30s from
+      // startHealthMonitoring(), clear that server's stale record).
+      if (this.servedStdio) {
+        return { healthy: true };
+      }
       // For stdio, check if process is running
       const pid = await this.readPidFile();
       if (pid === null) {
