@@ -20,7 +20,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -47,14 +47,38 @@ describe.skipIf(!CLI_BUILT)('#2952 init reads the parser\'s actual (camelCase) f
   it('--all-agents installs strictly more agents than the curated default', () => {
     const defaultCwd = mkdtempSync(join(tmpdir(), 'ruflo-2952-default-'));
     const allAgentsCwd = mkdtempSync(join(tmpdir(), 'ruflo-2952-all-'));
+    // `init` also writes user-level state: it appends a "Ruflo Integration"
+    // block to $HOME/.claude/CLAUDE.md (unless --no-global) and, when the Codex
+    // CLI is on PATH, registers an `npx ruflo@latest` MCP server and clones the
+    // ruflo marketplace into ~/.codex. Without a throwaway HOME, running this
+    // suite edits the developer's own global config. USERPROFILE covers Windows,
+    // where os.homedir() reads it.
+    //
+    // CODEX_HOME points inside a regular file, so it can never exist or be
+    // created: every Codex subcommand that needs its home (`mcp add`,
+    // `plugin marketplace add`, ...) fails at once, and init treats those as
+    // best-effort warnings. Otherwise Codex would register servers and start a
+    // full marketplace `git clone` that outlives the test (orphaned when init's
+    // timeout kills codex). Keep it unresolvable.
+    const home = mkdtempSync(join(tmpdir(), 'ruflo-2952-home-'));
+    const codexHomeBlocker = join(home, 'codex-home-is-a-file');
+    writeFileSync(codexHomeBlocker, '');
+    const env = {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      CODEX_HOME: join(codexHomeBlocker, '.codex'),
+    };
     try {
       execFileSync(process.execPath, [CLI_BIN, 'init', '--force'], {
         cwd: defaultCwd,
+        env,
         timeout: 30_000,
         stdio: 'pipe',
       });
       execFileSync(process.execPath, [CLI_BIN, 'init', '--force', '--all-agents'], {
         cwd: allAgentsCwd,
+        env,
         timeout: 30_000,
         stdio: 'pipe',
       });
@@ -69,6 +93,7 @@ describe.skipIf(!CLI_BUILT)('#2952 init reads the parser\'s actual (camelCase) f
     } finally {
       rmSync(defaultCwd, { recursive: true, force: true });
       rmSync(allAgentsCwd, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
     }
   }, 60_000);
 });
