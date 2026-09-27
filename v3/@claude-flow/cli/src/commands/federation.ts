@@ -17,6 +17,7 @@ async function run(ctx: CommandContext, tool: string, args: Record<string, unkno
     // CLI flag --gateway takes precedence over the RUFLO_X_GATEWAY_URL env var (ADR-125).
     const data = await callMCPTool(tool, { gatewayUrl: ctx.flags.gateway, ...args });
     printJsonOrTable(ctx, data, title);
+    if (data && typeof data === 'object' && (('ok' in data && data.ok === false) || ('degraded' in data && data.degraded === true))) return { success: false, exitCode: 1, data };
     return { success: true, data };
   } catch (e) {
     output.printError(`${title} failed: ${(e as Error).message}`);
@@ -32,8 +33,8 @@ export const federationCommand: Command = {
     { name: 'gateway', description: 'Gateway base URL (takes precedence over RUFLO_X_GATEWAY_URL; default https://x.ruv.io)', type: 'string' },
   ],
   subcommands: [
-    { name: 'join', description: 'Join the open swarm with YOUR OWN key using an invite code (generates ~/.ruflo/nostr.key if absent, claims via NIP-98, verifies via NIP-42)',
-      options: [{ name: 'code', description: 'Invite code (v2.…) — a bearer secret, keep it private', type: 'string', required: true }],
+    { name: 'join', description: 'Join the open swarm with YOUR OWN key without an invite on open relays (generates ~/.ruflo/nostr.key if absent, registers via NIP-98, verifies via NIP-42)',
+      options: [{ name: 'code', description: 'Invite code (v2.…) — a bearer secret, keep it private', type: 'string' }],
       action: (ctx) => run(ctx, 'x_federation_join', { code: ctx.flags.code }, 'Join federation') },
     { name: 'sync', description: 'Fetch recent verified swarm messages',
       options: [{ name: 'since', description: 'Look-back seconds (default 3600)', type: 'number' }, { name: 'limit', description: 'Max messages', type: 'number' }, { name: 'type', description: 'Filter by message type', type: 'string' }],

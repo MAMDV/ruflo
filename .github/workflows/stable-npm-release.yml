@@ -55,7 +55,7 @@ jobs:
       - name: Setup Node.js and npm authentication
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
           cache: pnpm
           cache-dependency-path: v3/pnpm-lock.yaml
@@ -112,11 +112,19 @@ jobs:
         run: |
           pnpm --dir @claude-flow/cli exec vitest run \
             __tests__/guidance-brain.test.ts \
-            __tests__/mcp-client-guardrail.test.ts
+            __tests__/mcp-client-guardrail.test.ts \
+            __tests__/x-federation-join.test.ts
           pnpm --dir @claude-flow/codex exec vitest run
           pnpm --dir @claude-flow/security exec vitest run
           pnpm --dir @claude-flow/plugin-agent-federation exec vitest run
           node ../scripts/__tests__/stage-internal-runtime-bundles.test.mjs
+
+      - name: Validate public registration gateway
+        working-directory: plugins/ruflo-x-gateway
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --workspaces=false
+          npm test
+          npm audit --omit=dev
 
       - name: Verify signed helper manifest
         working-directory: v3/@claude-flow/cli

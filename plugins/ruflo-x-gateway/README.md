@@ -48,3 +48,102 @@ content as data, not privileged commands.
 the proposed strict NIP-98 profile, signed machine messages, governance and validation
 evidence. Proposed requirements are distinguished from this gateway's current behavior.
 The draft is not a claim of full implementation conformance or industry ratification.
+
+## Public registration (operator enabled)
+
+The updated local client supports `npx ruflo federation join` without a code.
+It preserves an existing key, signs a NIP-98 request to the gateway and verifies
+NIP-42 authentication using that same key. `--code` remains supported for private
+invites. This source change needs a gateway deployment and CLI release before
+that command works for new users against production.
+
+`GET /api/registration` discovers the configured endpoint and limits.
+`POST /api/registration` accepts exactly `{}` and a NIP-98 Authorization header.
+The signer is the only key that can be admitted, always as `member`. No caller
+can request an admin role or redirect the admission to another relay. Gateway
+publishing, admin membership operations and private channel access keep their
+existing authorization requirements. Registration does not publish a user event.
+
+Proposed starting limits are **3 new admissions per client network per hour**
+(IPv4 address or IPv6 /64), **100 per UTC day globally**, and **4 in-flight
+admissions per gateway instance**. The first two limits use atomic Firestore
+transactions shared across replicas and restarts. Failed or ambiguous admissions
+consume quota and leave a permanent pending record for operator reconciliation.
+A new valid request for an already processed key does not grant it again.
+These limits bound enrollment, not posting volume or unique humans. Relay posting
+quotas and suspension must remain enforced at the relay; key ownership alone
+cannot prevent distributed account farming.
+
+### Production enablement
+
+Registration defaults to disabled. Prepare and verify all of the following:
+
+1. Configure `RUFLO_OPEN_REGISTRATION=true`, `RUFLO_PUBLIC_URL` as the exact HTTPS
+   gateway origin, `RUFLO_REGISTRATION_PROJECT`, and optionally
+   `RUFLO_REGISTRATION_DATABASE` (default `(default)`). Use a dedicated Firestore
+   database and service account where practical. The runtime needs Firestore
+   read/write permissions and its existing relay admin signing identity; callers
+   never receive that identity or its secret.
+2. Mount a stable random `RUFLO_REGISTRATION_IP_SALT` of at least 32 characters
+   from Secret Manager. Only HMAC network identifiers are stored, not raw IPs.
+   Changing the salt resets the per-network quota identity, so treat rotation as
+   an intentional quota reset. The global daily cap remains unchanged.
+3. Set `RUFLO_REGISTRATION_PROXY_HOPS` only after verifying the ingress chain.
+   Default `0` uses the socket address and ignores forwarded headers. Values
+   `1..3` walk from the right across exactly that many trusted proxies. An origin
+   reachable outside that trusted chain must not use proxy trust. Shared egress
+   can group legitimate users together; confirm this in staging.
+4. Import every existing revoked/banned key as a permanent
+   `rufloRegistration/key_<pubkey>` document with `status: "blocked"`. Do not
+   assume an unconditional relay admission preserves bans. Import existing
+   members as `status: "admitted"` to avoid changing their roles on enrollment.
+   Ordinary removals are not durable bans in Buzz: deleted rows and best effort
+   deltas cannot prove a complete historical removal list. If that history is
+   unavailable, keep registration paused until the operator explicitly permits
+   reapplication for keys without an active ban. Record that policy in the control
+   document. Current durable bans must always be imported. Every new grant also
+   checks the live `/moderation/restricted` endpoint; a ban or lookup failure
+   prevents admission, including bans created after rollout.
+5. Only after that import is verified, create `rufloRegistration/control` with
+   `enabled: true` and `revocationsImported: true`, plus the recorded historical
+   removal policy. Missing fields or a datastore
+   failure refuse enrollment. Changing `enabled` to false pauses new reservations
+   across replicas. GET discovery reports the environment configuration; a runtime
+   pause can still return 503. Both the environment switch and control document
+   must permit registration.
+6. Configure Firestore TTL on `expiresAt` for old IP/hour and daily counter
+   documents. Key and control documents deliberately have no TTL. Enforce access
+   through server IAM; clients must never write this collection directly.
+7. Test from an unadmitted local key: register without an invite, authenticate to
+   the canonical relay and publish a signed event. Require matching event IDs and
+   boolean `true` acknowledgments. Replays, foreign signatures, role overrides,
+   exhausted quotas and blocked keys must produce no admission event.
+
+Do not reuse gateway instance memory or an ephemeral filesystem as the production
+quota/replay store. Bound Cloud Run instance counts and apply an ingress request
+rate limit before activation: rejected signed requests can still cause database
+reads, and the admission quota is not a total request or billing ceiling.
+The Firestore SDK requires Node 22 or newer, matching the existing Docker image.
+One enrollment uses four transactional document reads, three
+reservation writes and one completion read/write, plus contention retries; no
+model call is involved. This is an operation count, not a cloud price quote.
+
+### Suspension and uncertain outcomes
+
+For revocation: pause registrations in the control document, drain or stop all
+in-flight registration handlers across every serving revision, set the key record
+to `blocked`, revoke it on the relay, and verify NIP-42 is refused before resuming.
+A database transaction and a relay grant are not one atomic transaction. Blocking
+a key while an earlier grant is in flight is insufficient: that grant can finish
+after the block. Never delete a pending/admitted record to retry blindly, since
+that can restore a revoked identity. If an admission acknowledgment was lost,
+first check relay membership with the user's local key and reconcile the record.
+
+### Validation
+
+`npm test` runs gateway and security regressions, including a local relay that
+requires matching signer/authentication identity. The registration store tests
+exercise the Firestore transaction adapter through a serialized test database;
+they are not proof of production IAM, ingress topology, TTL or emulator behavior.
+The CLI suite is `x-federation-join.test.ts`. A production activation must add a
+staging Firestore and live relay check before opening registration.

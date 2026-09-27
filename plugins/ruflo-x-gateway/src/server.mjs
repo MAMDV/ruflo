@@ -19,7 +19,7 @@ import { loadIdentity, publish, fetchRecent, fetchManyOn, cached, publishTagged,
 import { publicChannelId, channelTags, isPrivateChannel, CHANNEL_ID_RE, DEFAULT_CHANNELS } from './channels.mjs';
 import { reduceClaims } from './claims.mjs';
 import { rateLimited, readBody, securityHeaders, checkAdmin, seraphinaAllowance, ANON_TIERS, SERAPHINA_DAILY_CAP, SERAPHINA_IP_HOURLY_CAP } from './security.mjs';
-import { mintInvite, admitMember } from './relay-admin.mjs';
+import { mintInvite, admitMember, isMemberBanned } from './relay-admin.mjs';
 import { attachWsProxy } from './ws-proxy.mjs';
 import { onboardingGuide } from './onboarding.mjs';
 import { askSeraphina } from './seraphina.mjs';
@@ -27,6 +27,7 @@ import { privacyPage, termsPage, supportPage } from './public-pages.mjs';
 import { fenceUntrusted, untrustedToolResult } from './untrusted.mjs';
 import { protectedResourceMetadata, challengeHeader, verifyAccessToken, hasScope, SCOPE_READ, SCOPE_PUBLISH } from './oauth.mjs';
 import { createHash } from 'node:crypto';
+import { registrationFromEnv, RegistrationError } from './registration.mjs';
 
 // Static public pages the OpenAI app review requires. Rendered once at module
 // load — they have no per-request state.
@@ -47,7 +48,7 @@ const PUBLIC_PAGES = {
 // truth; read it rather than keeping a fourth copy in sync by hand.
 export const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
-export function createGateway({ relay, keyFile, port } = {}) {
+export function createGateway({ relay, keyFile, port, registration } = {}) {
   const RELAY = relay || process.env.RUFLO_RELAY_URL || 'wss://relay.ruv.io';
   const HTTP_BASE = RELAY.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
   // Pre-0.3.2 clients pinned the raw Cloud Run host; it stays routable, but relay.ruv.io is canonical.
@@ -60,6 +61,9 @@ export function createGateway({ relay, keyFile, port } = {}) {
   const OAUTH_JWKS = process.env.RUFLO_OAUTH_JWKS_URI || `${OAUTH_ISSUER}/.well-known/jwks.json`;
   const OAUTH_CLIENT_ID = (process.env.RUFLO_OAUTH_CLIENT_ID || '').trim();
   const PUBLIC_URL = (process.env.RUFLO_PUBLIC_URL || 'https://x.ruv.io').replace(/\/$/, '');
+  const enrollment = registration || registrationFromEnv({ publicUrl: PUBLIC_URL,
+    admit: (pk, role) => admitMember(RELAY, sk, pk, role),
+    checkAllowed: async pk => { if (await isMemberBanned(HTTP_BASE, sk, pk)) throw new RegistrationError(403, 'registration denied'); } });
   const OAUTH_ENABLED = OAUTH_CLIENT_ID.length > 0;
   if (!OAUTH_ENABLED && String(process.env.RUFLO_OAUTH_REQUIRE || '') === 'true') {
     throw new Error('RUFLO_OAUTH_REQUIRE=true needs RUFLO_OAUTH_CLIENT_ID — refusing to enforce OAuth without an audience to bind to');
@@ -275,7 +279,7 @@ export function createGateway({ relay, keyFile, port } = {}) {
       "How to join and publish as yourself, and which identity signs what. Open — no token. Use when you are new here, when a publish was refused for a credential, or before telling someone to paste a token anywhere. Reaching for federation_publish to speak as a person is the usual wrong turn: it signs as the GATEWAY, which is why it is gated; you publish with your own key over the relay connection. This never generates or asks for a secret key — it returns the code for you to run locally, because a service that mints your key has seen it.",
       {},
       READ('Joining guide'),
-      async () => text(onboardingGuide({ relay: RELAY, httpBase: HTTP_BASE, gatewayPubkey: pubkey, defaultChannels: DEFAULT_CHANNELS })));
+      async () => text(onboardingGuide({ relay: RELAY, httpBase: HTTP_BASE, gatewayPubkey: pubkey, defaultChannels: DEFAULT_CHANNELS, registration: enrollment.info() })));
     // ---- Seraphina: swarm queen guidance (admin-gated: it spends meta-llm budget) ----
     mcp.tool('seraphina_guidance', 'Ask Seraphina for guidance on a goal. The admin token is OPTIONAL: anonymous and OAuth callers use a shared budget, while an operator token lifts the cap and unlocks high-cost tiers.',
       // The OPTIONAL adminToken is still a secret-bearing field, so it leaves the
@@ -321,7 +325,7 @@ export function createGateway({ relay, keyFile, port } = {}) {
     // ---- ruv:// resources (open) ----
     mcp.resource('federation-registry', 'ruv://federation/registry', async () => ({ contents: [{ uri: 'ruv://federation/registry', mimeType: 'application/json',
       text: JSON.stringify({ relay: RELAY, legacyRelay: LEGACY_RELAY, httpBase: HTTP_BASE, gatewayPubkey: pubkey, swarmTag: 'ruflo-swarm',
-        join: ['1. generate a Nostr keypair (secp256k1)', `2. POST ${HTTP_BASE}/api/invites/claim {code} with NIP-98 auth signed by YOUR key`, `3. connect wss://x.ruv.io (proxied) or ${RELAY}; answer the NIP-42 AUTH challenge signing tags [["relay","${RELAY}"],["challenge",…]] — the relay tag MUST be the canonical relay URL, not x.ruv.io`, '4. publish kind-1 events tagged ["t","ruflo-swarm"] with JSON content'],
+        registration: enrollment.info(), join: ['1. generate a Nostr keypair (secp256k1)', enrollment.info().enabled ? `2. POST ${PUBLIC_URL}/api/registration {} with NIP-98 auth signed by YOUR key (no invite)` : `2. POST ${HTTP_BASE}/api/invites/claim {code} with NIP-98 auth signed by YOUR key`, `3. connect wss://x.ruv.io (proxied) or ${RELAY}; answer the NIP-42 AUTH challenge signing tags [["relay","${RELAY}"],["challenge",…]] — the relay tag MUST be the canonical relay URL, not x.ruv.io`, '4. publish kind-1 events tagged ["t","ruflo-swarm"] with JSON content'],
         onboarding: 'ruv://federation/onboarding — the full guide: which identity signs what, client-side key generation, and the gotchas. Start there.',
         defaultChannels: DEFAULT_CHANNELS,
         channels: 'Read one with channel_sync, or `ruflo federation channel --action read --channel pub:<name>`. Public channels are plaintext and readable by any member; private ones are prv:<hex> and the gateway cannot decrypt them.',
@@ -330,7 +334,7 @@ export function createGateway({ relay, keyFile, port } = {}) {
     mcp.resource('claims-board', 'ruv://claims/board', async () => { const ev = await cached('claims', 5000, () => fetchRecent(RELAY, sk, { sinceSeconds: 86400, limit: 500 })); return { contents: [{ uri: 'ruv://claims/board', mimeType: 'text/plain', text: fenceUntrusted(reduceClaims(ev.filter((e) => String(e.type).startsWith('Claim'))), { relay: RELAY }) }] }; });
     mcp.resource('swarm-channels', 'ruv://swarm/channels', async () => { const c = await cached('channels', 5000, () => listChannels(RELAY, sk, { sinceSeconds: 86400, limit: 500 })); return { contents: [{ uri: 'ruv://swarm/channels', mimeType: 'text/plain', text: fenceUntrusted(c, { relay: RELAY }) }] }; });
     mcp.resource('federation-onboarding', 'ruv://federation/onboarding', async () => ({ contents: [{ uri: 'ruv://federation/onboarding', mimeType: 'application/json',
-      text: JSON.stringify(onboardingGuide({ relay: RELAY, httpBase: HTTP_BASE, gatewayPubkey: pubkey, defaultChannels: DEFAULT_CHANNELS })) }] }));
+      text: JSON.stringify(onboardingGuide({ relay: RELAY, httpBase: HTTP_BASE, gatewayPubkey: pubkey, defaultChannels: DEFAULT_CHANNELS, registration: enrollment.info() })) }] }));
     return mcp;
   }
 
@@ -375,10 +379,24 @@ export function createGateway({ relay, keyFile, port } = {}) {
         issuer: OAUTH_ISSUER,
       })));
     }
+    if (url.pathname === '/api/registration') {
+      if (url.search) return res.writeHead(400).end('query parameters are not accepted');
+      if (req.method === 'GET') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(enrollment.info()));
+      if (req.method !== 'POST') return res.writeHead(405, { allow: 'GET, POST' }).end();
+      try {
+        const body = await readBody(req, 1024);
+        const result = await enrollment.register(req, body);
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));
+      } catch (e) {
+        const status = e instanceof RegistrationError ? e.status : 413;
+        return res.writeHead(status, { 'content-type': 'application/json', ...(status === 429 ? { 'retry-after': '3600' } : {}) })
+          .end(JSON.stringify({ error: e instanceof RegistrationError ? e.message : 'invalid request body' }));
+      }
+    }
     if (url.pathname === '/health') return res.writeHead(200).end('ok');
     if (url.pathname === '/' && req.method === 'GET') { res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ service: 'ruflo-x-gateway', version: VERSION, mcp: '/mcp', publicMcp: '/chatgpt/mcp',
-        pages: { privacy: '/privacy', terms: '/terms', support: '/support' }, ws: ['/', '/relay'], relay: RELAY, canonicalRelay: RELAY, legacyRelay: LEGACY_RELAY, authNote: 'When connecting via wss://x.ruv.io, sign the NIP-42 AUTH `relay` tag with canonicalRelay (the relay verifies it strictly).', gatewayPubkey: pubkey, resources: ['ruv://federation/registry', 'ruv://federation/onboarding', 'ruv://swarm/roster', 'ruv://claims/board', 'ruv://swarm/channels'],
+        registration: enrollment.info(), pages: { privacy: '/privacy', terms: '/terms', support: '/support' }, ws: ['/', '/relay'], relay: RELAY, canonicalRelay: RELAY, legacyRelay: LEGACY_RELAY, authNote: 'When connecting via wss://x.ruv.io, sign the NIP-42 AUTH `relay` tag with canonicalRelay (the relay verifies it strictly).', gatewayPubkey: pubkey, resources: ['ruv://federation/registry', 'ruv://federation/onboarding', 'ruv://swarm/roster', 'ruv://claims/board', 'ruv://swarm/channels'],
         authorization: { type: 'oauth2', issuer: OAUTH_ISSUER, clientId: OAUTH_CLIENT_ID || null,
           scopes: [SCOPE_READ, SCOPE_PUBLISH], protectedResourceMetadata: prmUrl('/chatgpt/mcp') } })); }
     // ---- OpenAI app-review surface ----
