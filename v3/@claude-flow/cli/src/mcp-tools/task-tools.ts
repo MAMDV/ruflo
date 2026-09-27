@@ -250,6 +250,9 @@ export const taskTools: MCPTool[] = [
       const task = store.tasks[taskId];
 
       if (task) {
+        if (task.status === 'completed') {
+          return { taskId: task.taskId, status: task.status, completedAt: task.completedAt, result: task.result };
+        }
         task.status = 'completed';
         task.progress = 100;
         task.completedAt = new Date().toISOString();
@@ -266,8 +269,10 @@ export const taskTools: MCPTool[] = [
             }
             for (const agentId of task.assignedTo) {
               if (agentStore.agents[agentId]) {
-                agentStore.agents[agentId].status = 'idle';
-                agentStore.agents[agentId].currentTask = null;
+                if (agentStore.agents[agentId].currentTask === taskId) {
+                  agentStore.agents[agentId].status = 'idle';
+                  agentStore.agents[agentId].currentTask = null;
+                }
                 agentStore.agents[agentId].taskCount =
                   ((agentStore.agents[agentId].taskCount as number) || 0) + 1;
               }
@@ -388,7 +393,7 @@ export const taskTools: MCPTool[] = [
       if (input.unassign) {
         // Revert previously assigned agents to idle
         for (const agentId of previouslyAssigned) {
-          if (agentStore.agents[agentId]) {
+          if (agentStore.agents[agentId]?.currentTask === taskId) {
             agentStore.agents[agentId].status = 'idle';
             agentStore.agents[agentId].currentTask = null;
           }
@@ -398,7 +403,7 @@ export const taskTools: MCPTool[] = [
         const agentIds = (input.agentIds as string[]) || [];
         // Revert old agents to idle
         for (const agentId of previouslyAssigned) {
-          if (!agentIds.includes(agentId) && agentStore.agents[agentId]) {
+          if (!agentIds.includes(agentId) && agentStore.agents[agentId]?.currentTask === taskId) {
             agentStore.agents[agentId].status = 'idle';
             agentStore.agents[agentId].currentTask = null;
           }
@@ -406,7 +411,7 @@ export const taskTools: MCPTool[] = [
         // Set new agents to active
         for (const agentId of agentIds) {
           if (agentStore.agents[agentId]) {
-            agentStore.agents[agentId].status = 'active';
+            agentStore.agents[agentId].status = 'busy';
             agentStore.agents[agentId].currentTask = taskId;
           }
         }
@@ -466,6 +471,20 @@ export const taskTools: MCPTool[] = [
         task.completedAt = new Date().toISOString();
         task.result = { cancelReason: input.reason || 'Cancelled by user' };
         saveTaskStore(store);
+        const agentStorePath = join(getProjectCwd(), STORAGE_DIR, 'agents', 'store.json');
+        try {
+          if (existsSync(agentStorePath)) {
+            const agents = JSON.parse(readFileSync(agentStorePath, 'utf-8'));
+            for (const agentId of task.assignedTo) {
+              if (agents.agents[agentId]?.currentTask === taskId) {
+                agents.agents[agentId].status = 'idle';
+                agents.agents[agentId].currentTask = null;
+              }
+            }
+            writeFileSync(agentStorePath, JSON.stringify(agents, null, 2), 'utf-8');
+          }
+        } catch { /* best-effort agent sync, as in task_complete */ }
+
 
         return {
           success: true,
