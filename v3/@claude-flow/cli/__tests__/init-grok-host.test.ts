@@ -149,7 +149,7 @@ describe.skipIf(!CLI_BUILT || process.platform === 'win32')(
       }
     }, 90_000);
 
-    it('--no-grok-detect suppresses it (the kebab opt-out actually works, unlike #3167)', () => {
+    it('--no-grok-detect suppresses it (both flag forms are read, as in the #3167 fix)', () => {
       const sandbox = makeSandbox();
       try {
         const stdout = runInit(sandbox, ['--no-grok-detect']);

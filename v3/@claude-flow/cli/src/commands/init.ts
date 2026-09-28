@@ -221,9 +221,8 @@ async function maybeAutoDetectGrok(ctx: CommandContext): Promise<void> {
   try {
     // #3167 — the parser stores `--no-grok-detect` as `flags.grokDetect = false`
     // (parser.ts:295-298 normalizes the key and drops the `no-` prefix); the
-    // literal kebab key is never written. Read both forms so the opt-out
-    // actually works — `--no-codex-detect` above reads only the literal key and
-    // is therefore a silent no-op today.
+    // literal kebab key is never written. Read both forms, the same way the
+    // #3167 fix reads `--no-codex-detect` above.
     if (ctx.flags['no-grok-detect'] === true || ctx.flags.grokDetect === false) return;
     if (ctx.flags.format === 'json') return; // scripted output stays pure
     if (!commandExists('grok')) return;
