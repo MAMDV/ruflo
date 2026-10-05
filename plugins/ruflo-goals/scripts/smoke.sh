@@ -98,6 +98,9 @@ grep -E '^  - .*aidefence_scan' "$ROOT/agents/deep-researcher.md" >/dev/null || 
 step "12. research-list.mjs runtime test passes"
 out=$(node "$ROOT/scripts/test-research-list.mjs" 2>&1) && ok || bad "$out"
 
+step "12b. research-list.mjs prefers the installed ruflo CLI over npx @latest (#3558)"
+out=$(node "$ROOT/scripts/test-cli-resolution-3558.mjs" 2>&1) && ok || bad "$out"
+
 
 # M1. The mod (ADR-445 pattern): hooks module registered, files within the 500-line rule
 step "M1. mod: hooks.json names register.ts, every hook file is present and under 500 lines"
