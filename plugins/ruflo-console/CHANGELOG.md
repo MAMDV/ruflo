@@ -2,6 +2,12 @@
 
 Newest first. One `## <version> — <date>` heading per version, then `feat:`, `fix:`, `breaking:` and `chore:` bullets (ADR-478). Built from git history; older versions: `git log -- plugins/ruflo-console`.
 
+## 0.40.0 — 2026-10-08
+- feat: advisor checkpoints for mission loops (ADR-483), off by default (Settings → Advisor checkpoints): a read-only second opinion before a plan locks, when the same check fails twice in a row, and before a mission is declared done; a third failure in a row pauses the mission
+- feat: each consult is a separate claude -p turn in plan mode on the model you choose (Settings → Advisor model), asked first with the exact command, under the turn budget and the mission spend cap; it is not Claude Code’s in-session advisor, which a mod cannot call
+- feat: Loop tab shows the failure state, the consults, the advisor’s cost as claude reported it beside the mission total, and the last answer
+- feat: Settings → Subagents return summaries only adds one line to the mission loop prompt
+
 ## 0.39.1 — 2026-10-07
 - fix: text you type is never silently shortened (ADR-481): the mission goal (was cut at 500 characters), the question, the aside, the guide, the research question, a loop task, help and ask questions, room messages, palette text, start fields, workflow guidance and messages, templates, security and memory fields, the Gates setting and the recall prompt now keep every character; the goal, the loop prompt and the mission context carry it whole
 - fix: the one-line field no longer hides what you typed: under any field whose text passes one line, a bordered mirror shows every line (wrapped, growing to 12 lines, then the last lines with a count) with a line count; type a backslash and n for a new line, and Enter sends all of it
