@@ -26,9 +26,16 @@ import { createHash, verify as edVerify } from 'crypto';
  * ruflo versions keep the old pubkey and verify old manifests successfully;
  * upgrading to v3.29.0+ atomically picks up this new pubkey along with the
  * new-key-signed manifest.
+ *
+ * MAMDV FORK (mak/signing-root, 2026-09-25): fork builds (X.Y.Z-mak.N) carry the
+ * fork's own helper-signing key so fork-modified helpers can ship signed. The
+ * private half is held out-of-repo by the fork owner and piped into
+ * `scripts/sign-helpers.mjs --stdin-key` at build time (never argv, never a file).
+ * Upstream's key was: MCowBQYDK2VwAyEAyLl9cG+V/C+ffKWaSwvOsHdXSWmB5e3x1z9NUNvq6Ys=
+ * Public key sha256: 5bdfa24380505ee58bbfbbb4513ffe844fd68110504800b3c5c7f07a9ce1f39c
  */
 export const RUFLO_HELPERS_PUBKEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAyLl9cG+V/C+ffKWaSwvOsHdXSWmB5e3x1z9NUNvq6Ys=
+MCowBQYDK2VwAyEAl2HNUGBYGjpCCFAvMWCpDH9Z6U9nsU8THg/G5TVMFNE=
 -----END PUBLIC KEY-----`;
 
 export const HELPERS_MANIFEST_FILE = 'helpers.manifest.json';
