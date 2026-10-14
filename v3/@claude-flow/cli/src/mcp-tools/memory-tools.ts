@@ -1172,6 +1172,11 @@ export const memoryTools: MCPTool[] = [
       let duplicatesSkipped = 0;
       const projects = new Set<string>();
 
+      // Keys are deterministic (claude:<project>:<name>:<section>), so a second import of the same
+      // memory files must update those rows. Without upsert, storeEntry refuses an existing key and the
+      // whole file is counted as skipped: an edited note never reaches the store again, and a re-run
+      // reports success: false. upsert keeps each row's provenance (storeEntry and bridgeStoreEntry
+      // read the existing provenance_type when none is passed).
       for (const memFile of memoryFiles) {
         projects.add(memFile.project);
         try {
@@ -1205,7 +1210,7 @@ export const memoryTools: MCPTool[] = [
             // #1884 — sanitize key so memory_delete can later remove it. Without
             // this, dangerous chars from frontmatter `name` strand the key.
             const key = sanitizeMemoryKey(`claude:${memFile.project}:${name}`);
-            const stored = await storeEntry({ key, value: body, namespace: ns, generateEmbeddingFlag: true });
+            const stored = await storeEntry({ key, value: body, namespace: ns, generateEmbeddingFlag: true, upsert: true });
             if (!stored.success) throw new Error(stored.error || `Failed to store ${key}`);
             imported++;
           } else {
@@ -1217,7 +1222,7 @@ export const memoryTools: MCPTool[] = [
               // #1884 — sanitize so any dangerous chars in the heading don't
               // produce keys memory_delete will reject.
               const key = sanitizeMemoryKey(`claude:${memFile.project}:${name}:${sectionTitle.slice(0, 50)}`);
-              const stored = await storeEntry({ key, value: sectionBody, namespace: ns, generateEmbeddingFlag: true });
+              const stored = await storeEntry({ key, value: sectionBody, namespace: ns, generateEmbeddingFlag: true, upsert: true });
               if (!stored.success) throw new Error(stored.error || `Failed to store ${key}`);
               imported++;
             }
